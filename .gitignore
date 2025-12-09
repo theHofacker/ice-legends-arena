@@ -1,0 +1,25 @@
+# Unity folders
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+
+# Visual Studio files
+.vs/
+*.csproj
+*.sln
+*.suo
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Package manager
+Packages/
+manifest.json
+packages-lock.json
