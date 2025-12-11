@@ -1,11 +1,11 @@
-# Unity folders
-Library/
-Temp/
-Obj/
-Build/
-Builds/
-Logs/
-UserSettings/
+# Unity folders (in Ice Legends Arena subfolder)
+Ice Legends Arena/Library/
+Ice Legends Arena/Temp/
+Ice Legends Arena/Obj/
+Ice Legends Arena/Build/
+Ice Legends Arena/Builds/
+Ice Legends Arena/Logs/
+Ice Legends Arena/UserSettings/
 
 # Visual Studio files
 .vs/
@@ -19,7 +19,8 @@ UserSettings/
 Thumbs.db
 Desktop.ini
 
-# Package manager
-Packages/
-manifest.json
-packages-lock.json
+# Unity Package Manager (ignore lock file but keep manifest)
+Ice Legends Arena/Packages/packages-lock.json
+
+# Claude Code local settings
+.claude/settings.local.json

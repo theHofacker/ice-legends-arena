@@ -4,7 +4,7 @@ A 5v5 fantasy hockey mobile game with character abilities, formation strategy, a
 
 ## Tech Stack
 
-- **Engine**: Unity 2022.3 LTS
+- **Engine**: Unity 6000.2.15f1
 - **Language**: C#
 - **Perspective**: 2.5D Isometric
 
