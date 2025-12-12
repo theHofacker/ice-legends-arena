@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class InputManager : MonoBehaviour
 {
@@ -8,7 +9,7 @@ public class InputManager : MonoBehaviour
     [SerializeField] private VirtualJoystick virtualJoystick;
 
     [Header("Input Actions Asset")]
-    [SerializeField] private InputSystem_Actions inputActionsAsset;
+    [SerializeField] private InputActionAsset inputActionsAsset;
 
     private InputSystem_Actions inputActions;
 
@@ -36,7 +37,7 @@ public class InputManager : MonoBehaviour
         // Initialize Input System
         if (inputActionsAsset != null)
         {
-            inputActions = inputActionsAsset;
+            inputActions = new InputSystem_Actions();
             inputActions.Enable();
         }
         else
