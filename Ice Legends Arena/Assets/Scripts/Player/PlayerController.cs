@@ -71,13 +71,13 @@ public class PlayerController : MonoBehaviour
         // Smoothly interpolate current velocity toward target velocity
         // This creates smooth acceleration/deceleration curves
         Vector2 newVelocity = Vector2.Lerp(
-            rb.velocity,
+            rb.linearVelocity,
             targetVelocity,
             lerpRate * Time.fixedDeltaTime
         );
 
         // Apply the calculated velocity to the rigidbody
-        rb.velocity = newVelocity;
+        rb.linearVelocity = newVelocity;
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public class PlayerController : MonoBehaviour
         // Draw velocity vector
         Gizmos.color = Color.green;
         Vector3 start = transform.position;
-        Vector3 end = start + new Vector3(rb.velocity.x, rb.velocity.y, 0);
+        Vector3 end = start + new Vector3(rb.linearVelocity.x, rb.linearVelocity.y, 0);
         Gizmos.DrawLine(start, end);
         Gizmos.DrawSphere(end, 0.1f);
     }
