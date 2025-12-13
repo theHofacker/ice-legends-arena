@@ -13,11 +13,11 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float maxSpeed = 5f;
 
     [Tooltip("How quickly the player accelerates from rest")]
-    [Range(1f, 30f)]
+    [Range(0.1f, 30f)]
     [SerializeField] private float acceleration = 10f;
 
     [Tooltip("How quickly the player decelerates to a stop (ice sliding)")]
-    [Range(1f, 30f)]
+    [Range(0.1f, 30f)]
     [SerializeField] private float deceleration = 15f;
 
     [Header("Debug")]
