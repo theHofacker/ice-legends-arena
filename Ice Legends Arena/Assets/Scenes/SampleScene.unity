@@ -197,7 +197,7 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 60, y: 1}
+  m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
 --- !u!23 &56375554
 MeshRenderer:
@@ -322,6 +322,18 @@ PrefabInstance:
       value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: 2986783802513014750, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 2986783802513014750, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 2986783802513014750, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 2986783802513014750, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0.76638937
       objectReference: {fileID: 0}
@@ -360,6 +372,10 @@ PrefabInstance:
     - target: {fileID: 2986783802513014750, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5439353618158438241, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
+      propertyPath: m_Radius
+      value: 0.03
       objectReference: {fileID: 0}
     - target: {fileID: 8123866670104810433, guid: 254e3d7777c636a4b8f4542c1ad16581, type: 3}
       propertyPath: m_Name
@@ -1110,7 +1126,7 @@ BoxCollider2D:
     drawMode: 2
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 60, y: 1}
+  m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
 --- !u!23 &1572343744
 MeshRenderer:
@@ -1246,7 +1262,7 @@ BoxCollider2D:
     drawMode: 2
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1, y: 30}
+  m_Size: {x: 0.2, y: 1}
   m_EdgeRadius: 0
 --- !u!23 &1648961189
 MeshRenderer:
@@ -1382,7 +1398,7 @@ BoxCollider2D:
     drawMode: 2
     adaptiveTiling: 0
   m_AutoTiling: 0
-  m_Size: {x: 1, y: 30}
+  m_Size: {x: 0.2, y: 1}
   m_EdgeRadius: 0
 --- !u!23 &1849798505
 MeshRenderer:

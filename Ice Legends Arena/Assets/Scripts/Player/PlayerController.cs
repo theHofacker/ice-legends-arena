@@ -26,10 +26,12 @@ public class PlayerController : MonoBehaviour
     // Component references
     private Rigidbody2D rb;
     private InputManager inputManager;
+    private SpriteRenderer spriteRenderer;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
 
         // Validate Rigidbody2D settings
         ValidateRigidbodySettings();
@@ -51,6 +53,7 @@ public class PlayerController : MonoBehaviour
         if (inputManager == null) return;
 
         HandleMovement();
+        UpdateSpriteDirection();
     }
 
     /// <summary>
@@ -78,6 +81,27 @@ public class PlayerController : MonoBehaviour
 
         // Apply the calculated velocity to the rigidbody
         rb.linearVelocity = newVelocity;
+    }
+
+    /// <summary>
+    /// Updates sprite direction based on horizontal movement input
+    /// </summary>
+    private void UpdateSpriteDirection()
+    {
+        if (spriteRenderer == null) return;
+
+        Vector2 moveInput = inputManager.MoveInput;
+
+        // Flip sprite based on horizontal movement
+        if (moveInput.x > 0.1f) // Moving right
+        {
+            spriteRenderer.flipX = false;
+        }
+        else if (moveInput.x < -0.1f) // Moving left
+        {
+            spriteRenderer.flipX = true;
+        }
+        // Don't flip if no horizontal input (keep last direction)
     }
 
     /// <summary>
