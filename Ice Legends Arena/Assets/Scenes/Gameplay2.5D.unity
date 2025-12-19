@@ -8627,7 +8627,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2832219296447810235, guid: ba9b2d0100c58634a89b9fa769157c23, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1883319994}
   m_SourcePrefab: {fileID: 100100000, guid: ba9b2d0100c58634a89b9fa769157c23, type: 3}
 --- !u!4 &1580933847 stripped
 Transform:
@@ -9377,6 +9380,27 @@ MonoBehaviour:
   maxAutoAimAngle: 45
   possessionRadius: 1.5
   showAimDebug: 1
+--- !u!1 &1883319990 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2832219296447810235, guid: ba9b2d0100c58634a89b9fa769157c23, type: 3}
+  m_PrefabInstance: {fileID: 1580933846}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1883319994
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1883319990}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37364e41accfe834b9b5d79df3df0836, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PuckController
+  possessionRadius: 1.5
+  possessionOffset: {x: 1, y: 0.5}
+  followSpeed: 20
+  releaseThreshold: 10
 --- !u!1 &1974146190
 GameObject:
   m_ObjectHideFlags: 0
