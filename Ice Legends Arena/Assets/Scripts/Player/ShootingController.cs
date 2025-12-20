@@ -40,9 +40,11 @@ public class ShootingController : MonoBehaviour
     private Transform puckTransform;
     private Rigidbody2D puckRb;
     private Transform nearestGoal;
+    private TimingMeter timingMeter;
 
     // State
     private Vector2 lastMoveDirection = Vector2.right;
+    private bool isChargingShot = false;
 
     private void Awake()
     {
@@ -76,8 +78,18 @@ public class ShootingController : MonoBehaviour
             Debug.LogWarning("ShootingController: No goals found. Auto-aim disabled.");
         }
 
+        // Get or add TimingMeter component
+        timingMeter = GetComponent<TimingMeter>();
+        if (timingMeter == null)
+        {
+            timingMeter = gameObject.AddComponent<TimingMeter>();
+            Debug.Log("ShootingController: Added TimingMeter component");
+        }
+
         // Subscribe to button manager
         ContextButtonManager.Instance.OnShootRequested += HandleShootRequested;
+        ContextButtonManager.Instance.OnShotChargeStarted += StartChargingShot;
+        ContextButtonManager.Instance.OnShotChargeEnded += StopChargingShot;
     }
 
     private void Update()
@@ -93,23 +105,44 @@ public class ShootingController : MonoBehaviour
         }
     }
 
+    private void StartChargingShot()
+    {
+        if (timingMeter != null && HasPossession())
+        {
+            isChargingShot = true;
+            timingMeter.StartCharging();
+        }
+    }
+
+    private void StopChargingShot()
+    {
+        if (!isChargingShot) return;
+
+        isChargingShot = false;
+
+        // Stop the timing meter and get result
+        if (timingMeter != null)
+        {
+            TimingMeter.TimingResult result = timingMeter.StopCharging();
+            float powerMultiplier = timingMeter.GetPowerMultiplier(result);
+
+            // Execute shot with timing multiplier
+            ExecuteTimedShot(powerMultiplier, result);
+        }
+    }
+
     private void HandleShootRequested(bool isCharged)
     {
-        // Check if we have possession
-        if (!HasPossession())
-        {
-            Debug.Log("Cannot shoot - no possession of puck");
-            return;
-        }
+        // This is now mainly for tap shots (wrist shots without timing)
+        // Charged shots use the timing system via StartChargingShot/StopChargingShot
 
-        // Execute shot
-        if (isCharged)
+        if (!isCharged)
         {
-            ExecuteSlapshot();
-        }
-        else
-        {
-            ExecuteWristShot();
+            // Quick tap - execute wrist shot immediately
+            if (HasPossession())
+            {
+                ExecuteWristShot();
+            }
         }
     }
 
@@ -130,6 +163,23 @@ public class ShootingController : MonoBehaviour
         Debug.Log($"Slapshot! Power: {slapshotPower}, Direction: {shotDirection}");
 
         // TODO: Add screen shake effect
+    }
+
+    private void ExecuteTimedShot(float powerMultiplier, TimingMeter.TimingResult result)
+    {
+        if (!HasPossession()) return;
+
+        Vector2 shotDirection = CalculateShotDirection();
+        float basePower = wristShotPower * slapshotMultiplier; // Use slapshot base power
+        float finalPower = basePower * powerMultiplier;
+
+        ApplyShotForce(shotDirection, finalPower);
+
+        string resultText = result == TimingMeter.TimingResult.Perfect ? "PERFECT" :
+                           result == TimingMeter.TimingResult.Weak ? "WEAK" : "OVERCHARGED";
+        Debug.Log($"Timed shot ({resultText})! Power: {finalPower} (base: {basePower}, multiplier: {powerMultiplier}x)");
+
+        // TODO: Add visual/audio feedback based on timing result
     }
 
     private Vector2 CalculateShotDirection()
@@ -204,6 +254,8 @@ public class ShootingController : MonoBehaviour
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnShootRequested -= HandleShootRequested;
+            ContextButtonManager.Instance.OnShotChargeStarted -= StartChargingShot;
+            ContextButtonManager.Instance.OnShotChargeEnded -= StopChargingShot;
         }
     }
 }

@@ -35,6 +35,8 @@ public class ContextButtonManager : MonoBehaviour
 
     // Events for action systems to subscribe to
     public System.Action<bool> OnShootRequested; // Parameter: isCharged (true for slapshot, false for wrist shot)
+    public System.Action OnShotChargeStarted; // Fired when player starts holding SHOOT button
+    public System.Action OnShotChargeEnded; // Fired when player releases SHOOT button
 
     private void Awake()
     {
@@ -87,6 +89,33 @@ public class ContextButtonManager : MonoBehaviour
     {
         // Check possession state every frame
         CheckPossessionState();
+
+        // Track shot charging for perfect timing system
+        TrackShotCharging();
+    }
+
+    private void TrackShotCharging()
+    {
+        // Check if button1 (SHOOT) is being held
+        if (button1 != null && CurrentState == PossessionState.Offense)
+        {
+            bool isHoldingShoot = button1.IsHeld();
+
+            // Start charging when hold begins
+            if (isHoldingShoot && !isShotCharging)
+            {
+                isShotCharging = true;
+                OnShotChargeStarted?.Invoke();
+                Debug.Log("Shot charging started!");
+            }
+            // Stop charging when released
+            else if (!isHoldingShoot && isShotCharging)
+            {
+                isShotCharging = false;
+                OnShotChargeEnded?.Invoke();
+                Debug.Log("Shot charging ended!");
+            }
+        }
     }
 
     private void CheckPossessionState()
@@ -128,6 +157,9 @@ public class ContextButtonManager : MonoBehaviour
             button3?.SetAction(ContextButton.ButtonAction.Defend);
         }
     }
+
+    // State for tracking shot charging
+    private bool isShotCharging = false;
 
     // Button activation handlers
     private void HandleButton1Activated(ContextButton.ButtonAction action, ContextButton.GestureType gesture)
