@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Manages the three context-sensitive buttons on the right side of the screen.
@@ -37,6 +38,12 @@ public class ContextButtonManager : MonoBehaviour
     public System.Action<bool> OnShootRequested; // Parameter: isCharged (true for slapshot, false for wrist shot)
     public System.Action OnShotChargeStarted; // Fired when player starts holding SHOOT button
     public System.Action OnShotChargeEnded; // Fired when player releases SHOOT button
+    public System.Action<bool> OnPassRequested; // Parameter: isCharged (true for saucer pass, false for basic pass)
+    public System.Action OnPassChargeStarted; // Fired when player starts holding PASS button
+    public System.Action OnPassChargeEnded; // Fired when player releases PASS button
+    public System.Action<bool> OnCheckRequested; // Parameter: isCharged (true for body check, false for poke check)
+    public System.Action OnCheckChargeStarted; // Fired when player starts holding CHECK button
+    public System.Action OnCheckChargeEnded; // Fired when player releases CHECK button
 
     private void Awake()
     {
@@ -92,14 +99,37 @@ public class ContextButtonManager : MonoBehaviour
 
         // Track shot charging for perfect timing system
         TrackShotCharging();
+
+        // Track pass charging for saucer pass timing system
+        TrackPassCharging();
+
+        // Track check charging for body check timing system
+        TrackCheckCharging();
     }
 
     private void TrackShotCharging()
     {
-        // Check if button1 (SHOOT) is being held
-        if (button1 != null && CurrentState == PossessionState.Offense)
+        // Check if SHOOT is being held (via button or keyboard)
+        if (CurrentState == PossessionState.Offense)
         {
-            bool isHoldingShoot = button1.IsHeld();
+            bool isHoldingShoot = false;
+
+            // Check button input
+            if (button1 != null)
+            {
+                isHoldingShoot = button1.IsHeld();
+            }
+
+            // Also check keyboard input (Space or Enter specifically)
+            // NOTE: We check specific keys instead of Attack/Jump actions because those
+            // actions also have mouse/touch bindings that conflict with the virtual joystick
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                isHoldingShoot = isHoldingShoot ||
+                               keyboard.spaceKey.isPressed ||
+                               keyboard.enterKey.isPressed;
+            }
 
             // Start charging when hold begins
             if (isHoldingShoot && !isShotCharging)
@@ -114,6 +144,66 @@ public class ContextButtonManager : MonoBehaviour
                 isShotCharging = false;
                 OnShotChargeEnded?.Invoke();
                 Debug.Log("Shot charging ended!");
+            }
+        }
+    }
+
+    private void TrackPassCharging()
+    {
+        // Check if PASS is being held (button2)
+        if (CurrentState == PossessionState.Offense)
+        {
+            bool isHoldingPass = false;
+
+            // Check button input
+            if (button2 != null)
+            {
+                isHoldingPass = button2.IsHeld();
+            }
+
+            // Start charging when hold begins
+            if (isHoldingPass && !isPassCharging)
+            {
+                isPassCharging = true;
+                OnPassChargeStarted?.Invoke();
+                Debug.Log("Pass charging started!");
+            }
+            // Stop charging when released
+            else if (!isHoldingPass && isPassCharging)
+            {
+                isPassCharging = false;
+                OnPassChargeEnded?.Invoke();
+                Debug.Log("Pass charging ended!");
+            }
+        }
+    }
+
+    private void TrackCheckCharging()
+    {
+        // Check if CHECK is being held (button1 in Defense mode)
+        if (CurrentState == PossessionState.Defense)
+        {
+            bool isHoldingCheck = false;
+
+            // Check button input
+            if (button1 != null)
+            {
+                isHoldingCheck = button1.IsHeld();
+            }
+
+            // Start charging when hold begins
+            if (isHoldingCheck && !isCheckCharging)
+            {
+                isCheckCharging = true;
+                OnCheckChargeStarted?.Invoke();
+                Debug.Log("Body check charging started!");
+            }
+            // Stop charging when released
+            else if (!isHoldingCheck && isCheckCharging)
+            {
+                isCheckCharging = false;
+                OnCheckChargeEnded?.Invoke();
+                Debug.Log("Body check charging ended!");
             }
         }
     }
@@ -160,6 +250,12 @@ public class ContextButtonManager : MonoBehaviour
 
     // State for tracking shot charging
     private bool isShotCharging = false;
+
+    // State for tracking pass charging
+    private bool isPassCharging = false;
+
+    // State for tracking check charging
+    private bool isCheckCharging = false;
 
     // Button activation handlers
     private void HandleButton1Activated(ContextButton.ButtonAction action, ContextButton.GestureType gesture)
@@ -224,18 +320,20 @@ public class ContextButtonManager : MonoBehaviour
 
     private void HandlePassAction(ContextButton.GestureType gesture)
     {
-        // Will be implemented in Sprint 3 (Passing System)
         if (gesture == ContextButton.GestureType.Tap)
         {
             Debug.Log("→ Basic pass");
+            OnPassRequested?.Invoke(false); // false = basic pass
         }
         else if (gesture == ContextButton.GestureType.Hold)
         {
-            Debug.Log("→ Saucer pass");
+            Debug.Log("→ Saucer pass (hold)");
+            OnPassRequested?.Invoke(true); // true = saucer pass (charged)
         }
         else if (gesture == ContextButton.GestureType.SwipeOff)
         {
             Debug.Log("→ Fake pass!");
+            // TODO: Implement fake pass in future sprint
         }
     }
 
@@ -247,14 +345,15 @@ public class ContextButtonManager : MonoBehaviour
 
     private void HandleCheckAction(ContextButton.GestureType gesture)
     {
-        // Will be implemented in Sprint 4 (Checking System)
         if (gesture == ContextButton.GestureType.Tap)
         {
             Debug.Log("→ Poke check");
+            OnCheckRequested?.Invoke(false); // false = poke check (tap)
         }
         else if (gesture == ContextButton.GestureType.Hold)
         {
             Debug.Log("→ Body check charging");
+            OnCheckRequested?.Invoke(true); // true = body check (hold)
         }
     }
 
