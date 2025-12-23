@@ -116,6 +116,28 @@ public class CheckingController : MonoBehaviour
                 lastMoveDirection = moveInput.normalized;
             }
         }
+
+        // Update button color based on timing meter
+        UpdateCheckButtonVisuals();
+    }
+
+    /// <summary>
+    /// Update CHECK button color based on timing meter zone
+    /// </summary>
+    private void UpdateCheckButtonVisuals()
+    {
+        if (!isChargingBodyCheck || !enablePerfectTiming || timingMeter == null)
+            return;
+
+        // Get current zone and color
+        TimingMeter.TimingResult currentZone = timingMeter.GetCurrentZone();
+        Color zoneColor = timingMeter.GetZoneColor(currentZone);
+
+        // Update button1 (CHECK button) color via ContextButtonManager
+        if (ContextButtonManager.Instance != null)
+        {
+            ContextButtonManager.Instance.UpdateButton1Color(zoneColor);
+        }
     }
 
     /// <summary>
@@ -168,6 +190,12 @@ public class CheckingController : MonoBehaviour
         float chargeTime = Time.time - bodyCheckChargeStartTime;
 
         Debug.Log($"Body check charge released after {chargeTime:F2}s");
+
+        // Reset button color
+        if (ContextButtonManager.Instance != null)
+        {
+            ContextButtonManager.Instance.ResetButton1Color();
+        }
 
         // Check if charge time is within valid range
         if (chargeTime >= minBodyCheckChargeTime && chargeTime <= maxBodyCheckChargeTime)

@@ -196,4 +196,20 @@ public class ContextButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandl
         if (!isPressed) return 0f;
         return Time.time - pressStartTime;
     }
+
+    /// <summary>
+    /// Public method to update button color (for timing meter feedback)
+    /// </summary>
+    public void UpdateButtonColor(Color color)
+    {
+        SetVisualState(color);
+    }
+
+    /// <summary>
+    /// Reset button to normal color
+    /// </summary>
+    public void ResetColor()
+    {
+        SetVisualState(normalColor);
+    }
 }

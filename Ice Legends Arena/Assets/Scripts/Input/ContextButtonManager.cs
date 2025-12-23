@@ -369,6 +369,28 @@ public class ContextButtonManager : MonoBehaviour
         Debug.Log("→ Defensive stance");
     }
 
+    /// <summary>
+    /// Update button1 color for timing meter feedback (called by CheckingController)
+    /// </summary>
+    public void UpdateButton1Color(Color color)
+    {
+        if (button1 != null)
+        {
+            button1.UpdateButtonColor(color);
+        }
+    }
+
+    /// <summary>
+    /// Reset button1 to normal color
+    /// </summary>
+    public void ResetButton1Color()
+    {
+        if (button1 != null)
+        {
+            button1.ResetColor();
+        }
+    }
+
     private void OnDestroy()
     {
         // Unsubscribe from events
