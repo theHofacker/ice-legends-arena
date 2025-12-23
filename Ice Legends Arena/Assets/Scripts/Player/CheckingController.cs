@@ -44,6 +44,14 @@ public class CheckingController : MonoBehaviour
     [Range(1f, 5f)]
     [SerializeField] private float bodyCheckRange = 2.5f;
 
+    [Header("Perfect Timing Settings")]
+    [Tooltip("Enable perfect timing for body checks")]
+    [SerializeField] private bool enablePerfectTiming = true;
+
+    [Tooltip("Distance to boards for glass hit (units)")]
+    [Range(1f, 5f)]
+    [SerializeField] private float glassHitDistance = 3f;
+
     [Header("Debug")]
     [SerializeField] private bool showCheckDebug = true;
 
@@ -52,6 +60,7 @@ public class CheckingController : MonoBehaviour
     private Transform puckTransform;
     private Rigidbody2D puckRb;
     private PuckController puckController;
+    private TimingMeter timingMeter;
 
     // State
     private Vector2 lastMoveDirection = Vector2.right;
@@ -77,6 +86,14 @@ public class CheckingController : MonoBehaviour
         else
         {
             Debug.LogError("CheckingController: No Puck found! Tag your puck with 'Puck' tag.");
+        }
+
+        // Get or add TimingMeter component (shared with ShootingController and PassingController)
+        timingMeter = GetComponent<TimingMeter>();
+        if (timingMeter == null)
+        {
+            timingMeter = gameObject.AddComponent<TimingMeter>();
+            Debug.Log("CheckingController: Added TimingMeter component");
         }
 
         // Subscribe to button manager CHECK events
@@ -127,7 +144,17 @@ public class CheckingController : MonoBehaviour
 
         isChargingBodyCheck = true;
         bodyCheckChargeStartTime = Time.time;
-        Debug.Log("Body check charging started!");
+
+        // Start timing meter if enabled
+        if (enablePerfectTiming && timingMeter != null)
+        {
+            timingMeter.StartCharging();
+            Debug.Log("Body check charging started with timing meter!");
+        }
+        else
+        {
+            Debug.Log("Body check charging started!");
+        }
     }
 
     /// <summary>
@@ -145,15 +172,41 @@ public class CheckingController : MonoBehaviour
         // Check if charge time is within valid range
         if (chargeTime >= minBodyCheckChargeTime && chargeTime <= maxBodyCheckChargeTime)
         {
-            ExecuteBodyCheck();
+            // Get timing result if enabled
+            TimingMeter.TimingResult timingResult = TimingMeter.TimingResult.Weak;
+            float powerMultiplier = 1f;
+
+            if (enablePerfectTiming && timingMeter != null)
+            {
+                timingResult = timingMeter.StopCharging();
+                powerMultiplier = timingMeter.GetPowerMultiplier(timingResult);
+                Debug.Log($"Timing result: {timingResult}, Power multiplier: {powerMultiplier}");
+            }
+
+            ExecuteBodyCheck(timingResult, powerMultiplier);
         }
         else if (chargeTime < minBodyCheckChargeTime)
         {
             Debug.Log($"Body check failed - not held long enough ({chargeTime:F2}s < {minBodyCheckChargeTime}s)");
+
+            // Stop timing meter if active
+            if (enablePerfectTiming && timingMeter != null)
+            {
+                timingMeter.StopCharging();
+            }
         }
         else
         {
             Debug.Log($"Body check failed - held too long ({chargeTime:F2}s > {maxBodyCheckChargeTime}s)");
+
+            // Stop timing meter and treat as overcharged miss
+            if (enablePerfectTiming && timingMeter != null)
+            {
+                timingMeter.StopCharging();
+            }
+
+            // Execute miss/stumble
+            ExecuteBodyCheckMiss();
         }
     }
 
@@ -246,13 +299,14 @@ public class CheckingController : MonoBehaviour
     /// <summary>
     /// Execute body check - shoulder charge that knocks down opponents
     /// </summary>
-    public void ExecuteBodyCheck()
+    public void ExecuteBodyCheck(TimingMeter.TimingResult timingResult, float powerMultiplier)
     {
-        Debug.Log("=== BODY CHECK EXECUTED ===");
+        Debug.Log($"=== BODY CHECK EXECUTED ({timingResult}) ===");
 
         // Find nearby opponents
         Collider2D[] nearbyObjects = Physics2D.OverlapCircleAll(transform.position, bodyCheckRange);
         bool hitOpponent = false;
+        Transform hitOpponentTransform = null;
 
         foreach (Collider2D obj in nearbyObjects)
         {
@@ -262,16 +316,20 @@ public class CheckingController : MonoBehaviour
                 // Calculate knockback direction (away from player)
                 Vector2 knockbackDirection = (opponent.transform.position - transform.position).normalized;
 
+                // Calculate final knockback force based on timing
+                float finalKnockbackForce = bodyCheckKnockbackForce * powerMultiplier;
+
                 // Apply knockback force to opponent
                 Rigidbody2D opponentRb = opponent.GetComponent<Rigidbody2D>();
                 if (opponentRb != null)
                 {
-                    opponentRb.linearVelocity = knockbackDirection * bodyCheckKnockbackForce;
-                    Debug.Log($"Applied {bodyCheckKnockbackForce} knockback force to {opponent.name}");
+                    opponentRb.linearVelocity = knockbackDirection * finalKnockbackForce;
+                    Debug.Log($"Applied {finalKnockbackForce:F1} knockback force to {opponent.name}");
                 }
 
-                // Stun opponent
-                opponent.ApplyBodyCheckStun(opponentStunDuration);
+                // Stun opponent (perfect timing = guaranteed stun, weak = shorter stun)
+                float stunDuration = timingResult == TimingMeter.TimingResult.Perfect ? opponentStunDuration : opponentStunDuration * 0.5f;
+                opponent.ApplyBodyCheckStun(stunDuration);
 
                 // Make puck pop loose if opponent had it
                 if (puckTransform != null && puckRb != null)
@@ -279,15 +337,17 @@ public class CheckingController : MonoBehaviour
                     float distanceToPuck = Vector2.Distance(opponent.transform.position, puckTransform.position);
                     if (distanceToPuck <= opponent.possessionRadius)
                     {
-                        // Pop puck in random direction
+                        // Pop puck in random direction (stronger with perfect timing)
                         Vector2 randomDirection = Random.insideUnitCircle.normalized;
-                        puckRb.linearVelocity = randomDirection * 15f;
+                        float puckForce = timingResult == TimingMeter.TimingResult.Perfect ? 20f : 15f;
+                        puckRb.linearVelocity = randomDirection * puckForce;
                         Debug.Log("Puck popped loose from opponent!");
                     }
                 }
 
                 hitOpponent = true;
-                Debug.Log($"BODY CHECK HIT {opponent.name}! Stunned for {opponentStunDuration}s");
+                hitOpponentTransform = opponent.transform;
+                Debug.Log($"BODY CHECK HIT {opponent.name}! Stunned for {stunDuration}s ({timingResult})");
                 break; // Only hit one opponent
             }
         }
@@ -296,21 +356,112 @@ public class CheckingController : MonoBehaviour
         {
             Debug.Log("Body check MISSED - no opponent in range");
         }
+        else if (timingResult == TimingMeter.TimingResult.Perfect)
+        {
+            // Check for glass hit (opponent near boards)
+            CheckForGlassHit(hitOpponentTransform);
+        }
 
-        // Enter recovery state for player
-        StartCoroutine(PlayerRecoveryCoroutine());
+        // Enter recovery state for player (perfect timing = no recovery!)
+        if (timingResult == TimingMeter.TimingResult.Perfect)
+        {
+            Debug.Log("PERFECT BODY CHECK! No recovery penalty!");
+            // No recovery for perfect timing
+        }
+        else if (timingResult == TimingMeter.TimingResult.Weak)
+        {
+            Debug.Log("Weak body check - off-balance!");
+            StartCoroutine(PlayerRecoveryCoroutine(playerRecoveryTime));
+        }
+        else // Overcharged
+        {
+            Debug.Log("Overcharged body check - stumble!");
+            StartCoroutine(PlayerRecoveryCoroutine(playerRecoveryTime * 1.5f));
+        }
 
         // TODO: Add impact sound effect
         // TODO: Add visual feedback (collision particles, screen shake)
     }
 
     /// <summary>
+    /// Execute failed body check - miss/stumble
+    /// </summary>
+    private void ExecuteBodyCheckMiss()
+    {
+        Debug.Log("=== BODY CHECK MISS/STUMBLE ===");
+
+        // Player stumbles with long recovery
+        StartCoroutine(PlayerRecoveryCoroutine(1f)); // 1 second recovery penalty
+
+        // TODO: Add stumble animation
+        // TODO: Add whiff sound effect
+    }
+
+    /// <summary>
+    /// Check if opponent hit the boards for a glass hit
+    /// </summary>
+    private void CheckForGlassHit(Transform opponentTransform)
+    {
+        if (opponentTransform == null) return;
+
+        // Find all objects with "Board" tag
+        GameObject[] boards = GameObject.FindGameObjectsWithTag("Board");
+
+        if (boards.Length == 0)
+        {
+            Debug.Log("No boards found - skipping glass hit check");
+            return;
+        }
+
+        // Check distance to nearest board
+        float nearestDistance = float.MaxValue;
+        foreach (GameObject board in boards)
+        {
+            float distance = Vector2.Distance(opponentTransform.position, board.transform.position);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+            }
+        }
+
+        // Trigger glass hit if close to boards
+        if (nearestDistance <= glassHitDistance)
+        {
+            Debug.Log($"GLASS HIT! Opponent hit boards at {nearestDistance:F2} units away!");
+            StartCoroutine(GlassHitEffect());
+        }
+    }
+
+    /// <summary>
+    /// Glass hit visual effect - screen shake, slow-mo, etc.
+    /// </summary>
+    private System.Collections.IEnumerator GlassHitEffect()
+    {
+        Debug.Log("=== GLASS HIT EFFECT ===");
+        Debug.Log("Screen shake, glass crack, crowd 'OHHH!'");
+
+        // TODO: Add screen shake
+        // TODO: Add glass crack particle effect
+        // TODO: Add crowd 'OHHH!' sound effect
+
+        // Slow motion effect
+        Time.timeScale = 0.5f;
+        Debug.Log("Slow-mo activated (0.5x speed)");
+
+        yield return new WaitForSecondsRealtime(0.5f); // Use real-time for slow-mo duration
+
+        // Restore normal speed
+        Time.timeScale = 1f;
+        Debug.Log("Slow-mo ended");
+    }
+
+    /// <summary>
     /// Player recovery state after body check
     /// </summary>
-    private System.Collections.IEnumerator PlayerRecoveryCoroutine()
+    private System.Collections.IEnumerator PlayerRecoveryCoroutine(float recoveryDuration)
     {
         isRecovering = true;
-        Debug.Log($"Player entering recovery state for {playerRecoveryTime}s");
+        Debug.Log($"Player entering recovery state for {recoveryDuration}s");
 
         // Slow down player during recovery
         if (playerRb != null)
@@ -318,7 +469,7 @@ public class CheckingController : MonoBehaviour
             playerRb.linearVelocity *= 0.3f; // Reduce velocity to 30%
         }
 
-        yield return new WaitForSeconds(playerRecoveryTime);
+        yield return new WaitForSeconds(recoveryDuration);
 
         isRecovering = false;
         Debug.Log("Player recovery complete");
