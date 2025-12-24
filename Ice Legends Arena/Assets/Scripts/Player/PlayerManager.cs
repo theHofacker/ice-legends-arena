@@ -64,7 +64,10 @@ public class PlayerManager : MonoBehaviour
             AutoDetectPlayers();
         }
 
-        // Set initial controlled player
+        // Initialize all players (disable control on all of them first)
+        InitializeAllPlayers();
+
+        // Set initial controlled player (enable control on player 0)
         if (teamPlayers.Count > 0)
         {
             SwitchToPlayer(0);
@@ -75,6 +78,22 @@ public class PlayerManager : MonoBehaviour
         {
             ContextButtonManager.Instance.OnSwitchRequested += HandleSwitchRequested;
         }
+    }
+
+    /// <summary>
+    /// Initialize all players - disable player control, enable AI
+    /// </summary>
+    private void InitializeAllPlayers()
+    {
+        foreach (GameObject player in teamPlayers)
+        {
+            if (player == null) continue;
+
+            // Disable all player control scripts
+            DisablePlayerControl(player);
+        }
+
+        Debug.Log($"PlayerManager: Initialized {teamPlayers.Count} players (all set to AI mode)");
     }
 
     /// <summary>
