@@ -30,6 +30,7 @@ public class PlayerManager : MonoBehaviour
     private GameObject currentControlIndicator; // Visual indicator instance
     private float lastSwitchTime = -999f;
     private Transform puckTransform;
+    private Dictionary<GameObject, Color> originalPlayerColors = new Dictionary<GameObject, Color>(); // Store original colors
 
     // Public properties
     public GameObject CurrentPlayer => (teamPlayers.Count > 0 && currentPlayerIndex < teamPlayers.Count)
@@ -81,13 +82,20 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Initialize all players - disable player control, enable AI
+    /// Initialize all players - disable player control, enable AI, store original colors
     /// </summary>
     private void InitializeAllPlayers()
     {
         foreach (GameObject player in teamPlayers)
         {
             if (player == null) continue;
+
+            // Store original color
+            SpriteRenderer spriteRenderer = player.GetComponent<SpriteRenderer>();
+            if (spriteRenderer != null && !originalPlayerColors.ContainsKey(player))
+            {
+                originalPlayerColors[player] = spriteRenderer.color;
+            }
 
             // Disable all player control scripts
             DisablePlayerControl(player);
@@ -210,10 +218,14 @@ public class PlayerManager : MonoBehaviour
         if (playerIndex < 0 || playerIndex >= teamPlayers.Count) return;
         if (teamPlayers[playerIndex] == null) return;
 
+        // Store reference to old player before switching
+        GameObject oldPlayer = CurrentPlayer;
+
         // Disable control on old player
-        if (CurrentPlayer != null)
+        if (oldPlayer != null)
         {
-            DisablePlayerControl(CurrentPlayer);
+            DisablePlayerControl(oldPlayer);
+            RestorePlayerColor(oldPlayer); // Restore original color
         }
 
         // Update current player
@@ -222,7 +234,7 @@ public class PlayerManager : MonoBehaviour
         // Enable control on new player
         EnablePlayerControl(CurrentPlayer);
 
-        // Update visual indicator
+        // Update visual indicator (this will change color to controlled color)
         UpdateControlIndicator();
     }
 
@@ -328,6 +340,25 @@ public class PlayerManager : MonoBehaviour
             if (playerSprite != null)
             {
                 playerSprite.color = controlledPlayerColor;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Restore player's original color
+    /// </summary>
+    private void RestorePlayerColor(GameObject player)
+    {
+        if (player == null) return;
+
+        // Only restore color if using sprite tint fallback (no indicator prefab)
+        if (controlIndicatorPrefab == null)
+        {
+            SpriteRenderer playerSprite = player.GetComponent<SpriteRenderer>();
+            if (playerSprite != null && originalPlayerColors.ContainsKey(player))
+            {
+                playerSprite.color = originalPlayerColors[player];
+                Debug.Log($"Restored {player.name} to original color: {originalPlayerColors[player]}");
             }
         }
     }
