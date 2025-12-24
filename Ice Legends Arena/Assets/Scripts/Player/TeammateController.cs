@@ -130,8 +130,11 @@ public class TeammateController : MonoBehaviour
         float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
         float distanceToHome = Vector2.Distance(transform.position, homePosition);
 
-        // If puck is within chase radius, move toward it
-        if (distanceToPuck < chaseRadius)
+        // Check if any teammate has possession (don't chase if teammate has it)
+        bool teammateHasPuck = IsTeammateControllingPuck();
+
+        // If puck is within chase radius AND no teammate has it, move toward it
+        if (distanceToPuck < chaseRadius && !teammateHasPuck)
         {
             Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
             rb.linearVelocity = directionToPuck * aiMoveSpeed;
@@ -147,6 +150,29 @@ public class TeammateController : MonoBehaviour
         {
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
+    }
+
+    /// <summary>
+    /// Check if any teammate (including player-controlled) has possession of the puck
+    /// </summary>
+    private bool IsTeammateControllingPuck()
+    {
+        if (puckTransform == null) return false;
+
+        // Check all players with Player tag
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (GameObject player in players)
+        {
+            float distanceToPuck = Vector2.Distance(player.transform.position, puckTransform.position);
+
+            // If any player is close to puck, consider it controlled
+            if (distanceToPuck <= receiveRadius * 1.5f) // Slightly larger radius
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void CheckPuckReception()
