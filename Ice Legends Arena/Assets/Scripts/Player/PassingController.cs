@@ -103,6 +103,7 @@ public class PassingController : MonoBehaviour
         ContextButtonManager.Instance.OnPassChargeStarted += StartChargingSaucerPass;
         ContextButtonManager.Instance.OnPassChargeEnded += StopChargingSaucerPass;
         ContextButtonManager.Instance.OnShootRequested += HandleShootForOneTimer;
+        ContextButtonManager.Instance.OnCheckRequested += HandleCheckForOneTimer; // Also listen for CHECK button (in Defense mode)
     }
 
     private void Update()
@@ -159,20 +160,39 @@ public class PassingController : MonoBehaviour
         // Only trigger one-timer on tap (not charged shots)
         if (!isCharged && enableOneTimer)
         {
-            // Check if within one-timer window after a pass
+            TryArmOneTimer();
+        }
+    }
+
+    private void HandleCheckForOneTimer(bool isCharged)
+    {
+        // When player taps CHECK after passing (in Defense mode), try to arm one-timer instead
+        if (!isCharged && enableOneTimer)
+        {
             float timeSincePass = Time.time - lastPassTime;
 
+            // Only intercept CHECK taps if within one-timer window
             if (lastPassTarget != null && timeSincePass <= oneTimerWindow)
             {
-                // Arm the teammate for a one-timer
-                TeammateController teammate = lastPassTarget.GetComponent<TeammateController>();
-                if (teammate != null)
-                {
-                    teammate.ArmOneTimer(oneTimerPowerMultiplier);
-                    Debug.Log($"ONE-TIMER ARMED for {lastPassTarget.name}! (Time since pass: {timeSincePass:F2}s)");
-                }
+                TryArmOneTimer();
             }
-            // Removed excessive debug logging for cleaner console
+        }
+    }
+
+    private void TryArmOneTimer()
+    {
+        // Check if within one-timer window after a pass
+        float timeSincePass = Time.time - lastPassTime;
+
+        if (lastPassTarget != null && timeSincePass <= oneTimerWindow)
+        {
+            // Arm the teammate for a one-timer
+            TeammateController teammate = lastPassTarget.GetComponent<TeammateController>();
+            if (teammate != null)
+            {
+                teammate.ArmOneTimer(oneTimerPowerMultiplier);
+                Debug.Log($"ONE-TIMER ARMED for {lastPassTarget.name}! (Time since pass: {timeSincePass:F2}s)");
+            }
         }
     }
 
@@ -417,6 +437,7 @@ public class PassingController : MonoBehaviour
             ContextButtonManager.Instance.OnPassChargeStarted -= StartChargingSaucerPass;
             ContextButtonManager.Instance.OnPassChargeEnded -= StopChargingSaucerPass;
             ContextButtonManager.Instance.OnShootRequested -= HandleShootForOneTimer;
+            ContextButtonManager.Instance.OnCheckRequested -= HandleCheckForOneTimer;
         }
     }
 }
