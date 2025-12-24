@@ -46,6 +46,7 @@ public class ContextButtonManager : MonoBehaviour
     public System.Action OnCheckChargeStarted; // Fired when player starts holding CHECK button
     public System.Action OnCheckChargeEnded; // Fired when player releases CHECK button
     public System.Action OnFakeCheckRequested; // Fired when player swipes off CHECK button (fake check)
+    public System.Action<bool> OnSwitchRequested; // Parameter: isHeld (true for hold = last defender, false for tap = nearest to puck)
 
     private void Awake()
     {
@@ -366,8 +367,16 @@ public class ContextButtonManager : MonoBehaviour
 
     private void HandleSwitchAction(ContextButton.GestureType gesture)
     {
-        // Will be implemented in Sprint 4
-        Debug.Log("→ Switch player");
+        if (gesture == ContextButton.GestureType.Tap)
+        {
+            Debug.Log("→ Switch to nearest player (tap)");
+            OnSwitchRequested?.Invoke(false); // false = tap (nearest to puck)
+        }
+        else if (gesture == ContextButton.GestureType.Hold)
+        {
+            Debug.Log("→ Switch to last defender (hold)");
+            OnSwitchRequested?.Invoke(true); // true = hold (last defender)
+        }
     }
 
     private void HandleDefendAction(ContextButton.GestureType gesture)

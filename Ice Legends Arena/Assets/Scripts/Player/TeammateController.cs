@@ -15,6 +15,19 @@ public class TeammateController : MonoBehaviour
     [Tooltip("Home position for this teammate")]
     public Vector2 homePosition = Vector2.zero;
 
+    [Header("AI Movement Settings")]
+    [Tooltip("Speed when AI is moving")]
+    [Range(1f, 10f)]
+    public float aiMoveSpeed = 3f;
+
+    [Tooltip("Distance to maintain from home position")]
+    [Range(1f, 10f)]
+    public float homePositionRadius = 5f;
+
+    [Tooltip("Distance to chase puck from home")]
+    [Range(5f, 20f)]
+    public float chaseRadius = 10f;
+
     [Tooltip("Distance to auto-receive puck")]
     [Range(0.5f, 3f)]
     public float receiveRadius = 1.5f;
@@ -100,10 +113,39 @@ public class TeammateController : MonoBehaviour
         // Check for puck reception
         CheckPuckReception();
 
-        // Simple AI: stay at home position for now
+        // AI movement behavior
         if (isAI && !hasPuck)
         {
-            // Could add movement logic here later
+            AIMovementBehavior();
+        }
+    }
+
+    /// <summary>
+    /// Simple AI behavior - chase puck if close, otherwise return to home position
+    /// </summary>
+    private void AIMovementBehavior()
+    {
+        if (puckTransform == null) return;
+
+        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
+        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+
+        // If puck is within chase radius, move toward it
+        if (distanceToPuck < chaseRadius)
+        {
+            Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
+            rb.linearVelocity = directionToPuck * aiMoveSpeed;
+        }
+        // If far from home, return to home position
+        else if (distanceToHome > homePositionRadius)
+        {
+            Vector2 directionToHome = (homePosition - (Vector2)transform.position).normalized;
+            rb.linearVelocity = directionToHome * aiMoveSpeed;
+        }
+        // Otherwise, slow down to a stop at home position
+        else
+        {
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
     }
 
