@@ -323,6 +323,12 @@ public class PassingController : MonoBehaviour
 
         foreach (TeammateController teammate in teammates)
         {
+            // Skip if TeammateController is disabled (currently controlled player)
+            if (!teammate.enabled || !teammate.isAI)
+            {
+                continue;
+            }
+
             Vector2 toTeammate = teammate.transform.position - transform.position;
             float distance = toTeammate.magnitude;
 
