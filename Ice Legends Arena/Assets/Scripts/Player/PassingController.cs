@@ -47,7 +47,7 @@ public class PassingController : MonoBehaviour
 
     [Tooltip("Time window after pass to trigger one-timer")]
     [Range(0.1f, 3f)]
-    [SerializeField] private float oneTimerWindow = 0.3f;
+    [SerializeField] private float oneTimerWindow = 1.0f;
 
     [Tooltip("Power multiplier for one-timer shots (+50% bonus)")]
     [Range(1.2f, 2f)]
