@@ -102,6 +102,7 @@ public class CheckingController : MonoBehaviour
             ContextButtonManager.Instance.OnCheckRequested += HandleCheckRequested;
             ContextButtonManager.Instance.OnCheckChargeStarted += HandleCheckChargeStarted;
             ContextButtonManager.Instance.OnCheckChargeEnded += HandleCheckChargeEnded;
+            ContextButtonManager.Instance.OnFakeCheckRequested += HandleFakeCheckRequested;
         }
     }
 
@@ -151,6 +152,33 @@ public class CheckingController : MonoBehaviour
             ExecutePokeCheck();
         }
         // Note: Body check is now handled by charge events (HandleCheckChargeEnded)
+    }
+
+    /// <summary>
+    /// Handle fake check request (swipe off)
+    /// </summary>
+    private void HandleFakeCheckRequested()
+    {
+        // Cancel any active body check charging
+        if (isChargingBodyCheck)
+        {
+            isChargingBodyCheck = false;
+
+            // Stop timing meter
+            if (enablePerfectTiming && timingMeter != null)
+            {
+                timingMeter.StopCharging();
+            }
+
+            // Reset button color
+            if (ContextButtonManager.Instance != null)
+            {
+                ContextButtonManager.Instance.ResetButton1Color();
+            }
+        }
+
+        // Execute fake check
+        ExecuteFakeCheck();
     }
 
     /// <summary>
@@ -426,6 +454,38 @@ public class CheckingController : MonoBehaviour
     }
 
     /// <summary>
+    /// Execute fake check - lunge without collision
+    /// </summary>
+    private void ExecuteFakeCheck()
+    {
+        Debug.Log("=== FAKE CHECK EXECUTED ===");
+
+        if (isRecovering)
+        {
+            Debug.Log("Cannot fake check - still recovering");
+            return;
+        }
+
+        // Apply forward lunge (short burst of speed in facing direction)
+        if (playerRb != null)
+        {
+            Vector2 lungeDirection = lastMoveDirection.magnitude > 0.1f ? lastMoveDirection : Vector2.right;
+            float lungeForce = 10f; // Quick lunge forward
+
+            playerRb.AddForce(lungeDirection * lungeForce, ForceMode2D.Impulse);
+            Debug.Log($"Fake check lunge: {lungeDirection} with force {lungeForce}");
+        }
+
+        // No collision detection (fake check has no hitbox)
+        // No recovery penalty (instant recovery - mind games!)
+        Debug.Log("Fake check - no collision, instant recovery!");
+
+        // TODO: Add lunge animation
+        // TODO: Add fake check sound effect
+        // TODO: Add opponent AI reaction (deke away if nearby)
+    }
+
+    /// <summary>
     /// Check if opponent hit the boards for a glass hit
     /// </summary>
     private void CheckForGlassHit(Transform opponentTransform)
@@ -542,6 +602,7 @@ public class CheckingController : MonoBehaviour
             ContextButtonManager.Instance.OnCheckRequested -= HandleCheckRequested;
             ContextButtonManager.Instance.OnCheckChargeStarted -= HandleCheckChargeStarted;
             ContextButtonManager.Instance.OnCheckChargeEnded -= HandleCheckChargeEnded;
+            ContextButtonManager.Instance.OnFakeCheckRequested -= HandleFakeCheckRequested;
         }
     }
 }

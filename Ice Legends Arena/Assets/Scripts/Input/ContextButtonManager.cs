@@ -44,6 +44,7 @@ public class ContextButtonManager : MonoBehaviour
     public System.Action<bool> OnCheckRequested; // Parameter: isCharged (true for body check, false for poke check)
     public System.Action OnCheckChargeStarted; // Fired when player starts holding CHECK button
     public System.Action OnCheckChargeEnded; // Fired when player releases CHECK button
+    public System.Action OnFakeCheckRequested; // Fired when player swipes off CHECK button (fake check)
 
     private void Awake()
     {
@@ -354,6 +355,11 @@ public class ContextButtonManager : MonoBehaviour
         {
             Debug.Log("→ Body check charging");
             OnCheckRequested?.Invoke(true); // true = body check (hold)
+        }
+        else if (gesture == ContextButton.GestureType.SwipeOff)
+        {
+            Debug.Log("→ Fake check!");
+            OnFakeCheckRequested?.Invoke();
         }
     }
 
