@@ -432,12 +432,21 @@ public class CheckingController : MonoBehaviour
     {
         if (opponentTransform == null) return;
 
-        // Find all objects with "Board" tag
-        GameObject[] boards = GameObject.FindGameObjectsWithTag("Board");
-
-        if (boards.Length == 0)
+        // Try to find all objects with "Board" tag
+        GameObject[] boards = null;
+        try
         {
-            Debug.Log("No boards found - skipping glass hit check");
+            boards = GameObject.FindGameObjectsWithTag("Board");
+        }
+        catch (UnityEngine.UnityException)
+        {
+            // Board tag doesn't exist yet - will be added when rink is built
+            return;
+        }
+
+        if (boards == null || boards.Length == 0)
+        {
+            // No boards in scene yet
             return;
         }
 
