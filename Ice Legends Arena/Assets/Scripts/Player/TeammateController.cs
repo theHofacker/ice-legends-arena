@@ -67,11 +67,8 @@ public class TeammateController : MonoBehaviour
 
     private void Start()
     {
-        // Set teammate color
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = teammateColor;
-        }
+        // DON'T set teammate color here - let PlayerManager handle colors
+        // (colors are set in Unity Inspector and stored by PlayerManager)
 
         // Find puck
         GameObject puck = GameObject.FindGameObjectWithTag("Puck");
