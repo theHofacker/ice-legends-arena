@@ -34,6 +34,8 @@ public class PuckController : MonoBehaviour
     private bool isPossessed = false;
     private Vector2 lastPlayerDirection = Vector2.right;
     private int originalSortingOrder;
+    private float timeSinceRelease = 0f;
+    private bool collisionDisabledAfterShot = false;
 
     private void Awake()
     {
@@ -50,21 +52,14 @@ public class PuckController : MonoBehaviour
 
     private void Start()
     {
-        // Find player
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
-        {
-            playerTransform = player.transform;
-            playerCollider = player.GetComponent<Collider2D>();
-        }
-        else
-        {
-            Debug.LogError("PuckController: No Player found! Tag your player with 'Player' tag.");
-        }
+        // Don't find player here - will be updated each frame from PlayerManager
     }
 
     private void Update()
     {
+        // Update current player reference from PlayerManager
+        UpdateCurrentPlayer();
+
         if (playerTransform == null) return;
 
         // Check for possession
@@ -72,6 +67,50 @@ public class PuckController : MonoBehaviour
 
         // Update player direction for possession offset
         UpdatePlayerDirection();
+    }
+
+    /// <summary>
+    /// Update current player reference to track the controlled player
+    /// </summary>
+    private void UpdateCurrentPlayer()
+    {
+        // Get currently controlled player from PlayerManager
+        if (PlayerManager.Instance != null && PlayerManager.Instance.CurrentPlayer != null)
+        {
+            GameObject currentPlayer = PlayerManager.Instance.CurrentPlayer;
+
+            // Only update if player changed
+            if (playerTransform == null || playerTransform.gameObject != currentPlayer)
+            {
+                // Re-enable collision with old player (if exists)
+                if (puckCollider != null && playerCollider != null && isPossessed)
+                {
+                    Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
+                }
+
+                // Switch to new player
+                playerTransform = currentPlayer.transform;
+                playerCollider = currentPlayer.GetComponent<Collider2D>();
+
+                // Re-disable collision if currently possessed
+                if (puckCollider != null && playerCollider != null && isPossessed)
+                {
+                    Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
+                }
+
+                Debug.Log($"PuckController now tracking: {currentPlayer.name}");
+            }
+        }
+        else if (playerTransform == null)
+        {
+            // Fallback: find any player with "Player" tag (for when PlayerManager doesn't exist)
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                playerTransform = player.transform;
+                playerCollider = player.GetComponent<Collider2D>();
+            }
+        }
     }
 
     private void FixedUpdate()
@@ -87,11 +126,30 @@ public class PuckController : MonoBehaviour
     {
         float distance = Vector2.Distance(transform.position, playerTransform.position);
 
-        // Auto-possess when close and puck is moving slowly
-        if (!isPossessed && distance <= possessionRadius && rb.linearVelocity.magnitude < releaseThreshold)
+        // Check if opponent has the puck (very close = they have possession)
+        bool opponentHasPuck = false;
+        OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
+        foreach (OpponentController opponent in opponents)
+        {
+            float distanceToOpponent = Vector2.Distance(transform.position, opponent.transform.position);
+            // Only prevent if opponent is VERY close (actually has possession)
+            // Changed from 2x to 1.2x to allow stealing loose pucks
+            if (distanceToOpponent <= possessionRadius * 1.2f && rb.linearVelocity.magnitude < 5f)
+            {
+                opponentHasPuck = true;
+                Debug.Log($"Opponent has puck ({distanceToOpponent:F2} units) - preventing steal");
+                break;
+            }
+        }
+
+        // Auto-possess when close and puck is moving slowly (and opponent doesn't have it)
+        bool canPossess = !isPossessed && distance <= possessionRadius && rb.linearVelocity.magnitude < releaseThreshold && !opponentHasPuck;
+
+        if (canPossess)
         {
             isPossessed = true;
             rb.linearVelocity = Vector2.zero; // Stop puck movement
+            Debug.Log($"Player auto-possessed puck (distance: {distance:F2}, velocity: {rb.linearVelocity.magnitude:F2}, opponentNearby: {opponentHasPuck})");
 
             // Disable collision between puck and player
             if (puckCollider != null && playerCollider != null)
@@ -110,17 +168,33 @@ public class PuckController : MonoBehaviour
         if (isPossessed && rb.linearVelocity.magnitude > releaseThreshold)
         {
             isPossessed = false;
+            collisionDisabledAfterShot = true;
+            timeSinceRelease = 0f;
 
-            // Re-enable collision between puck and player
-            if (puckCollider != null && playerCollider != null)
-            {
-                Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
-            }
+            // DON'T re-enable collision immediately - wait for puck to get away from player
+            // Collision will be re-enabled after delay (see below)
 
             // Restore original sorting order
             if (puckRenderer != null)
             {
                 puckRenderer.sortingOrder = originalSortingOrder;
+            }
+        }
+
+        // Re-enable collision after short delay (prevents puck from hitting player after shot)
+        if (collisionDisabledAfterShot)
+        {
+            timeSinceRelease += Time.deltaTime;
+
+            // Re-enable after 0.2 seconds OR when puck is far enough away
+            float distanceToPlayer = Vector2.Distance(transform.position, playerTransform.position);
+            if (timeSinceRelease > 0.2f || distanceToPlayer > 2f)
+            {
+                collisionDisabledAfterShot = false;
+                if (puckCollider != null && playerCollider != null)
+                {
+                    Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
+                }
             }
         }
     }
