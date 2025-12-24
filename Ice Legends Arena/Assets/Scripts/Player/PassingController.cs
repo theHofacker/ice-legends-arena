@@ -67,6 +67,8 @@ public class PassingController : MonoBehaviour
     private bool isChargingSaucerPass = false;
     private Transform lastPassTarget = null;
     private float lastPassTime = -999f;
+    private float lastFakePassTime = -999f; // For cooldown tracking
+    private float fakePassCooldown = 3f; // 3 second cooldown between fakes
 
     // Public properties
     public bool IsChargingSaucerPass => isChargingSaucerPass;
@@ -102,6 +104,7 @@ public class PassingController : MonoBehaviour
         ContextButtonManager.Instance.OnPassRequested += HandlePassRequested;
         ContextButtonManager.Instance.OnPassChargeStarted += StartChargingSaucerPass;
         ContextButtonManager.Instance.OnPassChargeEnded += StopChargingSaucerPass;
+        ContextButtonManager.Instance.OnFakePassRequested += HandleFakePassRequested;
         ContextButtonManager.Instance.OnShootRequested += HandleShootForOneTimer;
         ContextButtonManager.Instance.OnCheckRequested += HandleCheckForOneTimer; // Also listen for CHECK button (in Defense mode)
     }
@@ -153,6 +156,58 @@ public class PassingController : MonoBehaviour
         {
             ExecuteBasicPass();
         }
+    }
+
+    /// <summary>
+    /// Handle fake pass request (swipe off)
+    /// </summary>
+    private void HandleFakePassRequested()
+    {
+        // Cancel any active saucer pass charging
+        if (isChargingSaucerPass)
+        {
+            isChargingSaucerPass = false;
+
+            // Stop timing meter
+            if (enableSaucerTiming && timingMeter != null)
+            {
+                timingMeter.StopCharging();
+            }
+        }
+
+        // Execute fake pass
+        ExecuteFakePass();
+    }
+
+    /// <summary>
+    /// Execute fake pass - wind up without actually passing
+    /// </summary>
+    private void ExecuteFakePass()
+    {
+        // Check cooldown
+        float timeSinceLastFake = Time.time - lastFakePassTime;
+        if (timeSinceLastFake < fakePassCooldown)
+        {
+            float remainingCooldown = fakePassCooldown - timeSinceLastFake;
+            Debug.LogWarning($"Fake pass on cooldown! {remainingCooldown:F1}s remaining");
+            return;
+        }
+
+        // Wind-up motion: subtle movement in pass direction to sell the fake
+        Vector2 windUpDirection = lastMoveDirection.magnitude > 0.1f ? lastMoveDirection : Vector2.right;
+
+        // Apply subtle wind-up force (similar to fake check but in pass direction)
+        float windUpForce = 2.5f; // Subtle forward movement to sell the fake
+        playerRb.linearVelocity += windUpDirection * windUpForce;
+
+        // Keep possession - don't touch the puck (that's the point of a fake!)
+
+        // Update cooldown
+        lastFakePassTime = Time.time;
+
+        Debug.Log($"FAKE PASS! Wind-up in direction {windUpDirection}. Cooldown: {fakePassCooldown}s");
+
+        // TODO: AI defenders will react to this (future feature)
     }
 
     private void HandleShootForOneTimer(bool isCharged)
@@ -436,6 +491,7 @@ public class PassingController : MonoBehaviour
             ContextButtonManager.Instance.OnPassRequested -= HandlePassRequested;
             ContextButtonManager.Instance.OnPassChargeStarted -= StartChargingSaucerPass;
             ContextButtonManager.Instance.OnPassChargeEnded -= StopChargingSaucerPass;
+            ContextButtonManager.Instance.OnFakePassRequested -= HandleFakePassRequested;
             ContextButtonManager.Instance.OnShootRequested -= HandleShootForOneTimer;
             ContextButtonManager.Instance.OnCheckRequested -= HandleCheckForOneTimer;
         }

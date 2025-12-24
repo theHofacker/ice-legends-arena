@@ -41,6 +41,7 @@ public class ContextButtonManager : MonoBehaviour
     public System.Action<bool> OnPassRequested; // Parameter: isCharged (true for saucer pass, false for basic pass)
     public System.Action OnPassChargeStarted; // Fired when player starts holding PASS button
     public System.Action OnPassChargeEnded; // Fired when player releases PASS button
+    public System.Action OnFakePassRequested; // Fired when player swipes off PASS button (fake pass)
     public System.Action<bool> OnCheckRequested; // Parameter: isCharged (true for body check, false for poke check)
     public System.Action OnCheckChargeStarted; // Fired when player starts holding CHECK button
     public System.Action OnCheckChargeEnded; // Fired when player releases CHECK button
@@ -334,7 +335,7 @@ public class ContextButtonManager : MonoBehaviour
         else if (gesture == ContextButton.GestureType.SwipeOff)
         {
             Debug.Log("→ Fake pass!");
-            // TODO: Implement fake pass in future sprint
+            OnFakePassRequested?.Invoke();
         }
     }
 
