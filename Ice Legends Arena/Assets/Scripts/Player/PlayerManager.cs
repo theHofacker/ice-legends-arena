@@ -302,6 +302,11 @@ public class PlayerManager : MonoBehaviour
         {
             aiController.enabled = true;
             aiController.isAI = true; // Ensure AI mode is on
+            Debug.Log($"Enabled AI for {player.name} (isAI={aiController.isAI}, enabled={aiController.enabled})");
+        }
+        else
+        {
+            Debug.LogWarning($"{player.name} missing TeammateController! AI will not work.");
         }
 
         Debug.Log($"Disabled control for {player.name}");

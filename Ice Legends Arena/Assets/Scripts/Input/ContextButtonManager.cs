@@ -62,17 +62,7 @@ public class ContextButtonManager : MonoBehaviour
 
     private void Start()
     {
-        // Find player and puck
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
-        {
-            playerTransform = player.transform;
-        }
-        else
-        {
-            Debug.LogError("ContextButtonManager: No Player found! Tag your player with 'Player' tag.");
-        }
-
+        // Find puck (player will be updated each frame from PlayerManager)
         GameObject puck = GameObject.FindGameObjectWithTag("Puck");
         if (puck != null)
         {
@@ -97,6 +87,9 @@ public class ContextButtonManager : MonoBehaviour
 
     private void Update()
     {
+        // Update current player reference from PlayerManager
+        UpdateCurrentPlayer();
+
         // Check possession state every frame
         CheckPossessionState();
 
@@ -108,6 +101,27 @@ public class ContextButtonManager : MonoBehaviour
 
         // Track check charging for body check timing system
         TrackCheckCharging();
+    }
+
+    /// <summary>
+    /// Update current player reference to track the controlled player
+    /// </summary>
+    private void UpdateCurrentPlayer()
+    {
+        // Get currently controlled player from PlayerManager
+        if (PlayerManager.Instance != null && PlayerManager.Instance.CurrentPlayer != null)
+        {
+            playerTransform = PlayerManager.Instance.CurrentPlayer.transform;
+        }
+        else if (playerTransform == null)
+        {
+            // Fallback: find any player with "Player" tag
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                playerTransform = player.transform;
+            }
+        }
     }
 
     private void TrackShotCharging()
