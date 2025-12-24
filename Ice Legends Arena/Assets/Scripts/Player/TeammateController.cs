@@ -59,10 +59,11 @@ public class TeammateController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        // Set up physics for static teammate
-        rb.bodyType = RigidbodyType2D.Kinematic;
+        // Set up physics for teammate (Dynamic so AI can move them)
+        rb.bodyType = RigidbodyType2D.Dynamic;
         rb.gravityScale = 0;
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        rb.linearDamping = 2f; // Some drag for realistic movement
     }
 
     private void Start()
