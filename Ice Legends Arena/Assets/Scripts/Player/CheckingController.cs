@@ -466,14 +466,18 @@ public class CheckingController : MonoBehaviour
             return;
         }
 
-        // Apply forward lunge (short burst of speed in facing direction)
+        // Apply short forward lunge (subtle movement)
         if (playerRb != null)
         {
             Vector2 lungeDirection = lastMoveDirection.magnitude > 0.1f ? lastMoveDirection : Vector2.right;
-            float lungeForce = 10f; // Quick lunge forward
 
-            playerRb.AddForce(lungeDirection * lungeForce, ForceMode2D.Impulse);
-            Debug.Log($"Fake check lunge: {lungeDirection} with force {lungeForce}");
+            // Use a much smaller force for a subtle lunge (not a huge slide)
+            float lungeForce = 2.5f; // Subtle lunge forward
+
+            // Add a small burst of velocity instead of impulse force
+            playerRb.linearVelocity += lungeDirection * lungeForce;
+
+            Debug.Log($"Fake check lunge: {lungeDirection} with velocity boost {lungeForce}");
         }
 
         // No collision detection (fake check has no hitbox)
