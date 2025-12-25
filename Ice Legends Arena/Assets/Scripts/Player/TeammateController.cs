@@ -137,6 +137,24 @@ public class TeammateController : MonoBehaviour
             Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
             rb.linearVelocity = directionToPuck * aiMoveSpeed;
         }
+        // If teammate has puck, support them (move to open ice for passes)
+        else if (teammateHasPuck && distanceToPuck < chaseRadius)
+        {
+            // Move to a support position (offset from puck carrier)
+            Vector2 supportOffset = GetSupportPosition();
+            Vector2 directionToSupport = (supportOffset - (Vector2)transform.position).normalized;
+
+            // Only move if not already in good support position
+            float distanceToSupport = Vector2.Distance(transform.position, supportOffset);
+            if (distanceToSupport > 2f)
+            {
+                rb.linearVelocity = directionToSupport * (aiMoveSpeed * 0.7f); // Slower support movement
+            }
+            else
+            {
+                rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
+            }
+        }
         // If far from home, return to home position
         else if (distanceToHome > homePositionRadius)
         {
@@ -148,6 +166,22 @@ public class TeammateController : MonoBehaviour
         {
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
+    }
+
+    /// <summary>
+    /// Calculate support position for passing lanes
+    /// </summary>
+    private Vector2 GetSupportPosition()
+    {
+        // Simple support: spread out from puck carrier
+        // Move perpendicular to puck carrier's position
+        Vector2 toPuck = (Vector2)puckTransform.position - (Vector2)transform.position;
+        Vector2 perpendicular = new Vector2(-toPuck.y, toPuck.x).normalized;
+
+        // Support position: offset to the side of puck carrier
+        Vector2 supportPos = (Vector2)puckTransform.position + perpendicular * 8f;
+
+        return supportPos;
     }
 
     /// <summary>
