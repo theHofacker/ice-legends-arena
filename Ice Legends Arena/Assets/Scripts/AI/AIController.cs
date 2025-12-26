@@ -262,7 +262,11 @@ public class AIController : MonoBehaviour
         float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
         float distanceFromHome = Vector2.Distance(transform.position, homePosition);
 
-        if (distanceToPuck <= puckDetectionRange && puckRb.linearVelocity.magnitude > 1f)
+        // Chase puck if it's loose (no one has it) OR it's moving
+        // Changed from "velocity > 1f" to allow chasing stationary pucks
+        bool puckIsLoose = !hasPuck; // If we don't have it, it might be available
+
+        if (distanceToPuck <= puckDetectionRange && puckIsLoose)
         {
             // Only chase if:
             // 1. Formation is disabled, OR
@@ -332,8 +336,10 @@ public class AIController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(ai.transform.position, puckTransform.position);
 
-            // If someone else is closer or within threshold, don't chase
-            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            // Don't chase if:
+            // 1. They're closer than me, OR
+            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
+            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
             {
                 return false;
             }
@@ -358,8 +364,10 @@ public class AIController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(ai.transform.position, targetPosition);
 
-            // If someone else is closer or within threshold, don't check
-            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            // Don't check if:
+            // 1. They're closer than me, OR
+            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
+            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
             {
                 return false;
             }

@@ -246,8 +246,10 @@ public class TeammateController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(teammate.transform.position, puckTransform.position);
 
-            // If someone else is closer or within threshold, don't chase
-            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            // Don't chase if:
+            // 1. They're closer than me, OR
+            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
+            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
             {
                 return false;
             }
