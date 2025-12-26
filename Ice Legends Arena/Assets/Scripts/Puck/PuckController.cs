@@ -36,6 +36,7 @@ public class PuckController : MonoBehaviour
     private int originalSortingOrder;
     private float timeSinceRelease = 0f;
     private bool collisionDisabledAfterShot = false;
+    private bool wasOpponentPossessionLastFrame = false; // Track state changes for logging
 
     private void Awake()
     {
@@ -126,21 +127,62 @@ public class PuckController : MonoBehaviour
     {
         float distance = Vector2.Distance(transform.position, playerTransform.position);
 
-        // Check if opponent has the puck (very close = they have possession)
+        // Check if opponent or teammate has the puck (very close + slow = they have possession)
         bool opponentHasPuck = false;
+
+        // Check OpponentController (old simple AI)
         OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
         foreach (OpponentController opponent in opponents)
         {
             float distanceToOpponent = Vector2.Distance(transform.position, opponent.transform.position);
-            // Only prevent if opponent is VERY close (actually has possession)
-            // Changed from 2x to 1.2x to allow stealing loose pucks
-            if (distanceToOpponent <= possessionRadius * 1.2f && rb.linearVelocity.magnitude < 5f)
+            // Only prevent if opponent is VERY close AND puck is nearly stopped
+            if (distanceToOpponent <= possessionRadius * 1.0f && rb.linearVelocity.magnitude < 2f)
             {
                 opponentHasPuck = true;
-                Debug.Log($"Opponent has puck ({distanceToOpponent:F2} units) - preventing steal");
                 break;
             }
         }
+
+        // Check AIController (new smart AI opponents)
+        if (!opponentHasPuck)
+        {
+            AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
+            foreach (AIController ai in aiOpponents)
+            {
+                float distanceToAI = Vector2.Distance(transform.position, ai.transform.position);
+                // Only prevent if AI is VERY close AND puck is nearly stopped
+                if (distanceToAI <= possessionRadius * 1.0f && rb.linearVelocity.magnitude < 2f)
+                {
+                    opponentHasPuck = true;
+                    break;
+                }
+            }
+        }
+
+        // Check TeammateController (AI teammates - don't let player steal from own teammates)
+        if (!opponentHasPuck)
+        {
+            TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
+            foreach (TeammateController teammate in teammates)
+            {
+                if (!teammate.isAI || !teammate.enabled) continue; // Skip controlled player
+
+                float distanceToTeammate = Vector2.Distance(transform.position, teammate.transform.position);
+                // Only prevent if teammate is VERY close AND puck is nearly stopped
+                if (distanceToTeammate <= possessionRadius * 1.0f && rb.linearVelocity.magnitude < 2f)
+                {
+                    opponentHasPuck = true;
+                    break;
+                }
+            }
+        }
+
+        // Only log when state CHANGES (not every frame)
+        if (opponentHasPuck && !wasOpponentPossessionLastFrame)
+        {
+            Debug.Log($"Someone else has puck - preventing steal");
+        }
+        wasOpponentPossessionLastFrame = opponentHasPuck;
 
         // Auto-possess when close and puck is moving slowly (and opponent doesn't have it)
         bool canPossess = !isPossessed && distance <= possessionRadius && rb.linearVelocity.magnitude < releaseThreshold && !opponentHasPuck;

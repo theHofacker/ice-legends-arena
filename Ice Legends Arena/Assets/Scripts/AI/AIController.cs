@@ -247,10 +247,14 @@ public class AIController : MonoBehaviour
             float distanceToPlayer = Vector2.Distance(transform.position, player.transform.position);
             float distancePuckToPlayer = Vector2.Distance(puckTransform.position, player.transform.position);
 
-            // If player has puck and is within range
+            // If player has puck and is within range, check if WE should be the one to challenge them
             if (distancePuckToPlayer <= possessionRadius && distanceToPlayer <= opponentDetectionRange)
             {
-                return AIState.CheckOpponent; // Try to check opponent
+                // Only ONE AI should try to check at a time (nearest one)
+                if (!useFormation || IsSignificantlyNearestAIToTarget(player.transform.position))
+                {
+                    return AIState.CheckOpponent; // Try to check opponent
+                }
             }
         }
 
@@ -329,6 +333,32 @@ public class AIController : MonoBehaviour
             float theirDistance = Vector2.Distance(ai.transform.position, puckTransform.position);
 
             // If someone else is closer or within threshold, don't chase
+            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            {
+                return false;
+            }
+        }
+
+        return true; // We're significantly the nearest!
+    }
+
+    /// <summary>
+    /// Check if this AI is SIGNIFICANTLY nearest to a target position (at least 3 units closer)
+    /// Used for checking opponents with puck - only nearest AI should challenge
+    /// </summary>
+    private bool IsSignificantlyNearestAIToTarget(Vector3 targetPosition)
+    {
+        AIController[] allAI = FindObjectsOfType<AIController>();
+        float myDistance = Vector2.Distance(transform.position, targetPosition);
+        float significanceThreshold = 3f; // Must be at least 3 units closer
+
+        foreach (AIController ai in allAI)
+        {
+            if (ai == this) continue; // Skip self
+
+            float theirDistance = Vector2.Distance(ai.transform.position, targetPosition);
+
+            // If someone else is closer or within threshold, don't check
             if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
             {
                 return false;
