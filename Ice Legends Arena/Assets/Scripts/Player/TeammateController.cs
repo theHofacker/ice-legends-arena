@@ -131,11 +131,31 @@ public class TeammateController : MonoBehaviour
         // Check if any teammate has possession (don't chase if teammate has it)
         bool teammateHasPuck = IsTeammateControllingPuck();
 
-        // If puck is within chase radius AND no teammate has it, move toward it
+        // If puck is within chase radius AND no teammate has it, check if we should chase
         if (distanceToPuck < chaseRadius && !teammateHasPuck)
         {
-            Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
-            rb.linearVelocity = directionToPuck * aiMoveSpeed;
+            // Only chase if we're significantly the nearest teammate (prevents swarming)
+            if (IsSignificantlyNearestTeammate())
+            {
+                Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
+                rb.linearVelocity = directionToPuck * aiMoveSpeed;
+            }
+            else
+            {
+                // Not the nearest, so move to support position instead
+                Vector2 supportOffset = GetSupportPosition();
+                Vector2 directionToSupport = (supportOffset - (Vector2)transform.position).normalized;
+
+                float distanceToSupport = Vector2.Distance(transform.position, supportOffset);
+                if (distanceToSupport > 2f)
+                {
+                    rb.linearVelocity = directionToSupport * (aiMoveSpeed * 0.7f);
+                }
+                else
+                {
+                    rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
+                }
+            }
         }
         // If teammate has puck, support them (move to open ice for passes)
         else if (teammateHasPuck && distanceToPuck < chaseRadius)
@@ -205,6 +225,35 @@ public class TeammateController : MonoBehaviour
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Check if this teammate is SIGNIFICANTLY nearest to the puck (at least 3 units closer)
+    /// This prevents multiple teammates from swarming the puck
+    /// </summary>
+    private bool IsSignificantlyNearestTeammate()
+    {
+        if (puckTransform == null) return false;
+
+        TeammateController[] allTeammates = FindObjectsOfType<TeammateController>();
+        float myDistance = Vector2.Distance(transform.position, puckTransform.position);
+        float significanceThreshold = 3f; // Must be at least 3 units closer
+
+        foreach (TeammateController teammate in allTeammates)
+        {
+            if (teammate == this) continue; // Skip self
+            if (!teammate.isAI || !teammate.enabled) continue; // Skip non-AI or disabled teammates
+
+            float theirDistance = Vector2.Distance(teammate.transform.position, puckTransform.position);
+
+            // If someone else is closer or within threshold, don't chase
+            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            {
+                return false;
+            }
+        }
+
+        return true; // We're significantly the nearest!
     }
 
     private void CheckPuckReception()

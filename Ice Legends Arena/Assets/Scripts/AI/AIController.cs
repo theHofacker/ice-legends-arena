@@ -262,9 +262,8 @@ public class AIController : MonoBehaviour
         {
             // Only chase if:
             // 1. Formation is disabled, OR
-            // 2. Puck is within our zone (not too far from home), OR
-            // 3. We're the nearest AI to the puck
-            if (!useFormation || distanceToPuck < zoneRadius * 0.5f || IsNearestAIToPuck())
+            // 2. We're SIGNIFICANTLY the nearest AI to the puck (at least 3 units closer than anyone else)
+            if (!useFormation || IsSignificantlyNearestAIToPuck())
             {
                 return AIState.ChasePuck; // Chase loose puck
             }
@@ -291,7 +290,7 @@ public class AIController : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if this AI is the nearest teammate to the puck
+    /// Check if this AI is the nearest teammate to the puck (original version, unused)
     /// </summary>
     private bool IsNearestAIToPuck()
     {
@@ -311,6 +310,32 @@ public class AIController : MonoBehaviour
         }
 
         return true; // We're the nearest!
+    }
+
+    /// <summary>
+    /// Check if this AI is SIGNIFICANTLY nearest to the puck (at least 3 units closer)
+    /// This prevents multiple AI from chasing when they're roughly equidistant
+    /// </summary>
+    private bool IsSignificantlyNearestAIToPuck()
+    {
+        AIController[] allAI = FindObjectsOfType<AIController>();
+        float myDistance = Vector2.Distance(transform.position, puckTransform.position);
+        float significanceThreshold = 3f; // Must be at least 3 units closer
+
+        foreach (AIController ai in allAI)
+        {
+            if (ai == this) continue; // Skip self
+
+            float theirDistance = Vector2.Distance(ai.transform.position, puckTransform.position);
+
+            // If someone else is closer or within threshold, don't chase
+            if (theirDistance < myDistance || Mathf.Abs(theirDistance - myDistance) < significanceThreshold)
+            {
+                return false;
+            }
+        }
+
+        return true; // We're significantly the nearest!
     }
 
     /// <summary>
