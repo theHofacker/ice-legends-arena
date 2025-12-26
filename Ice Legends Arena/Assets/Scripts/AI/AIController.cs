@@ -11,6 +11,20 @@ public class AIController : MonoBehaviour
     [Tooltip("AI difficulty level")]
     public AIDifficulty difficulty = AIDifficulty.Medium;
 
+    [Tooltip("Player position/role")]
+    public PlayerPosition position = PlayerPosition.Center;
+
+    [Header("Formation Settings")]
+    [Tooltip("Home position for this AI (their zone)")]
+    public Vector2 homePosition = Vector2.zero;
+
+    [Tooltip("How far AI can chase from home position")]
+    [Range(5f, 30f)]
+    public float zoneRadius = 15f;
+
+    [Tooltip("Enable formation discipline (AI returns to position)")]
+    public bool useFormation = true;
+
     [Header("Movement Settings")]
     [Tooltip("AI movement speed")]
     [Range(1f, 10f)]
@@ -45,7 +59,18 @@ public class AIController : MonoBehaviour
         AttackGoal,     // Has puck, moving toward opponent goal
         DefendGoal,     // Opponent has puck, defending own goal
         PassToTeammate, // Looking to pass puck to teammate
-        CheckOpponent   // Attempting to check opponent with puck
+        CheckOpponent,  // Attempting to check opponent with puck
+        ReturnToPosition // Returning to home position/zone
+    }
+
+    // Player Positions
+    public enum PlayerPosition
+    {
+        Center,
+        LeftWing,
+        RightWing,
+        LeftDefense,
+        RightDefense
     }
 
     // AI Difficulty Levels
@@ -108,10 +133,16 @@ public class AIController : MonoBehaviour
             ownGoal = goals[1].transform;     // AI's goal (AI defends)
         }
 
+        // Set home position if not set
+        if (homePosition == Vector2.zero)
+        {
+            homePosition = transform.position;
+        }
+
         // Set difficulty modifiers
         SetDifficultyModifiers();
 
-        Debug.Log($"AIController initialized on {gameObject.name} - Difficulty: {difficulty}");
+        Debug.Log($"AIController initialized on {gameObject.name} - Position: {position}, Difficulty: {difficulty}");
     }
 
     private void Update()
@@ -223,11 +254,20 @@ public class AIController : MonoBehaviour
             }
         }
 
-        // Priority 3: Check if puck is loose and nearby
+        // Priority 3: Check if puck is loose and nearby (with formation logic)
         float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
+        float distanceFromHome = Vector2.Distance(transform.position, homePosition);
+
         if (distanceToPuck <= puckDetectionRange && puckRb.linearVelocity.magnitude > 1f)
         {
-            return AIState.ChasePuck; // Chase loose puck
+            // Only chase if:
+            // 1. Formation is disabled, OR
+            // 2. Puck is within our zone (not too far from home), OR
+            // 3. We're the nearest AI to the puck
+            if (!useFormation || distanceToPuck < zoneRadius * 0.5f || IsNearestAIToPuck())
+            {
+                return AIState.ChasePuck; // Chase loose puck
+            }
         }
 
         // Priority 4: Defend goal if puck is near
@@ -240,8 +280,37 @@ public class AIController : MonoBehaviour
             }
         }
 
+        // Priority 5: Return to position if too far from home
+        if (useFormation && distanceFromHome > zoneRadius)
+        {
+            return AIState.ReturnToPosition;
+        }
+
         // Default: Idle
         return AIState.Idle;
+    }
+
+    /// <summary>
+    /// Check if this AI is the nearest teammate to the puck
+    /// </summary>
+    private bool IsNearestAIToPuck()
+    {
+        AIController[] allAI = FindObjectsOfType<AIController>();
+        float myDistance = Vector2.Distance(transform.position, puckTransform.position);
+        float nearestDistance = myDistance;
+
+        foreach (AIController ai in allAI)
+        {
+            if (ai == this) continue; // Skip self
+
+            float theirDistance = Vector2.Distance(ai.transform.position, puckTransform.position);
+            if (theirDistance < nearestDistance)
+            {
+                return false; // Someone else is closer
+            }
+        }
+
+        return true; // We're the nearest!
     }
 
     /// <summary>
@@ -273,6 +342,10 @@ public class AIController : MonoBehaviour
 
             case AIState.CheckOpponent:
                 ExecuteCheckOpponent();
+                break;
+
+            case AIState.ReturnToPosition:
+                ExecuteReturnToPosition();
                 break;
         }
     }
@@ -361,6 +434,23 @@ public class AIController : MonoBehaviour
             rb.linearVelocity = direction * (moveSpeed * speedModifier * 1.1f); // Slightly faster when checking
 
             // TODO: Execute actual check when close enough (will implement in Issue #43)
+        }
+    }
+
+    private void ExecuteReturnToPosition()
+    {
+        // Move back to home position
+        Vector2 direction = (homePosition - (Vector2)transform.position).normalized;
+        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+
+        if (distanceToHome > 1f)
+        {
+            rb.linearVelocity = direction * (moveSpeed * speedModifier);
+        }
+        else
+        {
+            // Close enough to home, slow down
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
     }
 
