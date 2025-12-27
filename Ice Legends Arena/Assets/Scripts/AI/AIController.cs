@@ -250,10 +250,17 @@ public class AIController : MonoBehaviour
             // If player has puck and is within range, check if WE should be the one to challenge them
             if (distancePuckToPlayer <= possessionRadius && distanceToPlayer <= opponentDetectionRange)
             {
-                // Only ONE AI should try to check at a time (nearest one)
-                if (!useFormation || IsSignificantlyNearestAIToTarget(player.transform.position))
+                // ALWAYS check if we're nearest (prevents all AI from swarming)
+                // This check applies regardless of useFormation setting
+                if (IsSignificantlyNearestAIToTarget(player.transform.position))
                 {
                     return AIState.CheckOpponent; // Try to check opponent
+                }
+                else
+                {
+                    // Not nearest, so don't check - let nearest AI handle it
+                    // Skip to next priority (defend goal or return to position)
+                    continue;
                 }
             }
         }

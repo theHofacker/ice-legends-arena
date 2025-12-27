@@ -211,14 +211,21 @@ public class TeammateController : MonoBehaviour
     {
         if (puckTransform == null) return false;
 
-        // Check all players with Player tag
+        // First check: Does ContextButtonManager say player has puck?
+        if (ContextButtonManager.Instance != null && ContextButtonManager.Instance.HasPuck)
+        {
+            return true; // Controlled player has possession
+        }
+
+        // Second check: Check all players with Player tag (for safety/fallback)
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
         foreach (GameObject player in players)
         {
             float distanceToPuck = Vector2.Distance(player.transform.position, puckTransform.position);
 
             // If any player is close to puck, consider it controlled
-            if (distanceToPuck <= receiveRadius * 1.5f) // Slightly larger radius
+            // Increased radius from 1.5x to 3x to account for fast skating
+            if (distanceToPuck <= receiveRadius * 3f)
             {
                 return true;
             }
