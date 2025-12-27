@@ -228,8 +228,8 @@ public class TeammateController : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if this teammate is SIGNIFICANTLY nearest to the puck (at least 3 units closer)
-    /// This prevents multiple teammates from swarming the puck
+    /// Check if this teammate is the NEAREST to the puck (simpler check, no threshold)
+    /// This prevents multiple teammates from swarming the puck - only the closest one chases
     /// </summary>
     private bool IsSignificantlyNearestTeammate()
     {
@@ -237,7 +237,6 @@ public class TeammateController : MonoBehaviour
 
         TeammateController[] allTeammates = FindObjectsOfType<TeammateController>();
         float myDistance = Vector2.Distance(transform.position, puckTransform.position);
-        float significanceThreshold = 3f; // Must be at least 3 units closer
 
         foreach (TeammateController teammate in allTeammates)
         {
@@ -246,16 +245,14 @@ public class TeammateController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(teammate.transform.position, puckTransform.position);
 
-            // Don't chase if:
-            // 1. They're closer than me, OR
-            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
-            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
+            // If ANYONE else is closer, I shouldn't chase
+            if (theirDistance < myDistance)
             {
                 return false;
             }
         }
 
-        return true; // We're significantly the nearest!
+        return true; // I'm the nearest!
     }
 
     private void CheckPuckReception()

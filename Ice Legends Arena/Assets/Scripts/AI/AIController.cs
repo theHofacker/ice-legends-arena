@@ -321,14 +321,13 @@ public class AIController : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if this AI is SIGNIFICANTLY nearest to the puck (at least 3 units closer)
-    /// This prevents multiple AI from chasing when they're roughly equidistant
+    /// Check if this AI is the NEAREST to the puck (simpler check, no threshold)
+    /// This prevents multiple AI from chasing - only the closest one chases
     /// </summary>
     private bool IsSignificantlyNearestAIToPuck()
     {
         AIController[] allAI = FindObjectsOfType<AIController>();
         float myDistance = Vector2.Distance(transform.position, puckTransform.position);
-        float significanceThreshold = 3f; // Must be at least 3 units closer
 
         foreach (AIController ai in allAI)
         {
@@ -336,27 +335,24 @@ public class AIController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(ai.transform.position, puckTransform.position);
 
-            // Don't chase if:
-            // 1. They're closer than me, OR
-            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
-            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
+            // If ANYONE else is closer (or equal distance), I shouldn't chase
+            if (theirDistance < myDistance)
             {
                 return false;
             }
         }
 
-        return true; // We're significantly the nearest!
+        return true; // I'm the nearest!
     }
 
     /// <summary>
-    /// Check if this AI is SIGNIFICANTLY nearest to a target position (at least 3 units closer)
+    /// Check if this AI is the NEAREST to a target position
     /// Used for checking opponents with puck - only nearest AI should challenge
     /// </summary>
     private bool IsSignificantlyNearestAIToTarget(Vector3 targetPosition)
     {
         AIController[] allAI = FindObjectsOfType<AIController>();
         float myDistance = Vector2.Distance(transform.position, targetPosition);
-        float significanceThreshold = 3f; // Must be at least 3 units closer
 
         foreach (AIController ai in allAI)
         {
@@ -364,16 +360,14 @@ public class AIController : MonoBehaviour
 
             float theirDistance = Vector2.Distance(ai.transform.position, targetPosition);
 
-            // Don't check if:
-            // 1. They're closer than me, OR
-            // 2. They're not at least 3 units FURTHER than me (i.e., I'm not significantly closer)
-            if (theirDistance <= myDistance || (theirDistance - myDistance) < significanceThreshold)
+            // If ANYONE else is closer (or equal distance), I shouldn't check
+            if (theirDistance < myDistance)
             {
                 return false;
             }
         }
 
-        return true; // We're significantly the nearest!
+        return true; // I'm the nearest!
     }
 
     /// <summary>
