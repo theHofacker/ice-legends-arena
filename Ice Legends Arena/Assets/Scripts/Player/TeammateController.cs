@@ -12,7 +12,10 @@ public class TeammateController : MonoBehaviour
     [Tooltip("Is this teammate AI-controlled or just a dummy?")]
     public bool isAI = false;
 
-    [Tooltip("Home position for this teammate")]
+    [Tooltip("Player role/position for formation system")]
+    public FormationManager.PlayerRole playerRole = FormationManager.PlayerRole.Center;
+
+    [Tooltip("Home position for this teammate (fallback if no FormationManager)")]
     public Vector2 homePosition = Vector2.zero;
 
     [Header("AI Movement Settings")]
@@ -20,11 +23,11 @@ public class TeammateController : MonoBehaviour
     [Range(1f, 10f)]
     public float aiMoveSpeed = 3f;
 
-    [Tooltip("Distance to maintain from home position")]
-    [Range(1f, 10f)]
-    public float homePositionRadius = 5f;
+    [Tooltip("Distance to maintain from formation position")]
+    [Range(1f, 5f)]
+    public float formationPositionRadius = 2f;
 
-    [Tooltip("Distance to chase puck from home")]
+    [Tooltip("Distance to chase puck when designated as pressure player")]
     [Range(5f, 20f)]
     public float chaseRadius = 10f;
 
@@ -119,90 +122,96 @@ public class TeammateController : MonoBehaviour
     }
 
     /// <summary>
-    /// Simple AI behavior - chase puck if close, otherwise return to home position
+    /// Formation-based AI behavior - moves to formation position based on game state
     /// </summary>
     private void AIMovementBehavior()
     {
         if (puckTransform == null) return;
 
-        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
-        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+        // Use FormationManager if available
+        if (FormationManager.Instance != null)
+        {
+            FormationBasedMovement();
+        }
+        else
+        {
+            // Fallback to old behavior if no FormationManager
+            LegacyMovementBehavior();
+        }
+    }
 
-        // Check if any teammate has possession (don't chase if teammate has it)
+    /// <summary>
+    /// Formation-based movement (NEW SYSTEM)
+    /// </summary>
+    private void FormationBasedMovement()
+    {
+        // Get target formation position from FormationManager
+        Vector2 formationPosition = FormationManager.Instance.GetFormationPosition(playerRole);
+        float distanceToFormation = Vector2.Distance(transform.position, formationPosition);
+        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
+
+        // Check if teammate has possession
         bool teammateHasPuck = IsTeammateControllingPuck();
 
-        // If puck is within chase radius AND no teammate has it, check if we should chase
-        if (distanceToPuck < chaseRadius && !teammateHasPuck)
+        // Decision tree:
+        // 1. Should I pressure the puck? (only if FormationManager says so AND I'm nearest)
+        // 2. If not, move to my formation position
+
+        bool shouldPressure = FormationManager.Instance.ShouldPressurePuck(playerRole);
+
+        if (shouldPressure && !teammateHasPuck && distanceToPuck < chaseRadius)
         {
-            // Only chase if we're significantly the nearest teammate (prevents swarming)
+            // I'm designated to pressure - chase the puck (only if I'm nearest)
             if (IsSignificantlyNearestTeammate())
             {
                 Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
                 rb.linearVelocity = directionToPuck * aiMoveSpeed;
-            }
-            else
-            {
-                // Not the nearest, so move to support position instead
-                Vector2 supportOffset = GetSupportPosition();
-                Vector2 directionToSupport = (supportOffset - (Vector2)transform.position).normalized;
-
-                float distanceToSupport = Vector2.Distance(transform.position, supportOffset);
-                if (distanceToSupport > 2f)
-                {
-                    rb.linearVelocity = directionToSupport * (aiMoveSpeed * 0.7f);
-                }
-                else
-                {
-                    rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
-                }
+                return;
             }
         }
-        // If teammate has puck, support them (move to open ice for passes)
-        else if (teammateHasPuck && distanceToPuck < chaseRadius)
+
+        // Default: Move to formation position
+        if (distanceToFormation > formationPositionRadius)
         {
-            // Move to a support position (offset from puck carrier)
-            Vector2 supportOffset = GetSupportPosition();
-            Vector2 directionToSupport = (supportOffset - (Vector2)transform.position).normalized;
-
-            // Only move if not already in good support position
-            float distanceToSupport = Vector2.Distance(transform.position, supportOffset);
-            if (distanceToSupport > 2f)
-            {
-                rb.linearVelocity = directionToSupport * (aiMoveSpeed * 0.7f); // Slower support movement
-            }
-            else
-            {
-                rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
-            }
+            Vector2 directionToFormation = (formationPosition - (Vector2)transform.position).normalized;
+            rb.linearVelocity = directionToFormation * aiMoveSpeed;
         }
-        // If far from home, return to home position
-        else if (distanceToHome > homePositionRadius)
+        else
+        {
+            // At formation position - slow down and hold
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
+        }
+    }
+
+    /// <summary>
+    /// Legacy movement behavior (FALLBACK if no FormationManager)
+    /// </summary>
+    private void LegacyMovementBehavior()
+    {
+        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
+        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+
+        // Check if any teammate has possession
+        bool teammateHasPuck = IsTeammateControllingPuck();
+
+        // Chase puck if no teammate has it and we're nearest
+        if (distanceToPuck < chaseRadius && !teammateHasPuck && IsSignificantlyNearestTeammate())
+        {
+            Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
+            rb.linearVelocity = directionToPuck * aiMoveSpeed;
+        }
+        // Otherwise return to home position
+        else if (distanceToHome > formationPositionRadius)
         {
             Vector2 directionToHome = (homePosition - (Vector2)transform.position).normalized;
             rb.linearVelocity = directionToHome * aiMoveSpeed;
         }
-        // Otherwise, slow down to a stop at home position
         else
         {
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
     }
 
-    /// <summary>
-    /// Calculate support position for passing lanes
-    /// </summary>
-    private Vector2 GetSupportPosition()
-    {
-        // Simple support: spread out from puck carrier
-        // Move perpendicular to puck carrier's position
-        Vector2 toPuck = (Vector2)puckTransform.position - (Vector2)transform.position;
-        Vector2 perpendicular = new Vector2(-toPuck.y, toPuck.x).normalized;
-
-        // Support position: offset to the side of puck carrier
-        Vector2 supportPos = (Vector2)puckTransform.position + perpendicular * 8f;
-
-        return supportPos;
-    }
 
     /// <summary>
     /// Check if any teammate (including player-controlled) has possession of the puck
@@ -396,9 +405,20 @@ public class TeammateController : MonoBehaviour
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(transform.position, receiveRadius);
 
-        // Draw home position
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(homePosition, 0.5f);
+        // Draw formation position (if FormationManager exists)
+        if (Application.isPlaying && FormationManager.Instance != null)
+        {
+            Vector2 formationPos = FormationManager.Instance.GetFormationPosition(playerRole);
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(formationPos, 0.5f);
+            Gizmos.DrawLine(transform.position, formationPos);
+        }
+        else
+        {
+            // Draw home position (fallback)
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(homePosition, 0.5f);
+        }
 
         // Draw one-timer shot direction (if armed and in play mode)
         if (Application.isPlaying && isArmedForOneTimer && nearestGoal != null)
