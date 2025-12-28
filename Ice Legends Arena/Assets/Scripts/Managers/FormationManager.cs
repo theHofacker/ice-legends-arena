@@ -80,13 +80,13 @@ public class FormationManager : MonoBehaviour
     {
         [Header("Forward Positions (relative to reference point)")]
         [Tooltip("Center position offset")]
-        public Vector2 centerOffset = new Vector2(0, -4);      // Trail behind puck carrier
+        public Vector2 centerOffset = new Vector2(0, -5);      // Trail behind puck carrier
 
         [Tooltip("Left Wing position offset")]
-        public Vector2 leftWingOffset = new Vector2(-10, 3);   // Left lane, ahead
+        public Vector2 leftWingOffset = new Vector2(-10, 0);   // Left lane, even with carrier
 
         [Tooltip("Right Wing position offset")]
-        public Vector2 rightWingOffset = new Vector2(10, 3);   // Right lane, ahead
+        public Vector2 rightWingOffset = new Vector2(10, 0);   // Right lane, even with carrier
 
         [Header("Defense Positions (relative to reference point)")]
         [Tooltip("Left Defense position offset")]
@@ -132,10 +132,10 @@ public class FormationManager : MonoBehaviour
         {
             offensiveFormation = new FormationOffsets
             {
-                // Offensive: Spread out, push forward
-                centerOffset = new Vector2(0, -4),        // Trail for drop passes
-                leftWingOffset = new Vector2(-10, 3),     // Wide left, ahead
-                rightWingOffset = new Vector2(10, 3),     // Wide right, ahead
+                // Offensive: Spread wide, stay even with puck carrier
+                centerOffset = new Vector2(0, -5),        // Trail behind for drop passes
+                leftWingOffset = new Vector2(-10, 0),     // Wide left, even with you
+                rightWingOffset = new Vector2(10, 0),     // Wide right, even with you
                 leftDefenseOffset = new Vector2(-6, -12), // Stay back (blue line)
                 rightDefenseOffset = new Vector2(6, -12)  // Stay back (blue line)
             };
@@ -157,11 +157,11 @@ public class FormationManager : MonoBehaviour
             neutralFormation = new FormationOffsets
             {
                 // Neutral: Balanced positioning
-                centerOffset = new Vector2(0, 0),
-                leftWingOffset = new Vector2(-10, 2),
-                rightWingOffset = new Vector2(10, 2),
-                leftDefenseOffset = new Vector2(-6, -8),
-                rightDefenseOffset = new Vector2(6, -8)
+                centerOffset = new Vector2(0, -3),        // Trail behind slightly
+                leftWingOffset = new Vector2(-10, 0),     // Wide left, even
+                rightWingOffset = new Vector2(10, 0),     // Wide right, even
+                leftDefenseOffset = new Vector2(-6, -8),  // Stay back
+                rightDefenseOffset = new Vector2(6, -8)   // Stay back
             };
         }
 
