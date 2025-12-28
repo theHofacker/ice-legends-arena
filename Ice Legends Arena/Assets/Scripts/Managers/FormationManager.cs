@@ -41,11 +41,11 @@ public class FormationManager : MonoBehaviour
     [Range(10f, 40f)]
     [SerializeField] private float defenseMaxPushDistance = 25f;
 
-    [Tooltip("Max distance wings can drift from their lane (Y axis - horizontal on vertical rink)")]
+    [Tooltip("Max distance wings can drift from their lane (X axis - left/right on screen)")]
     [Range(3f, 12f)]
     [SerializeField] private float wingLaneWidth = 8f;
 
-    [Tooltip("Max distance center can drift from center ice (Y axis - horizontal on vertical rink)")]
+    [Tooltip("Max distance center can drift from center ice (X axis - left/right on screen)")]
     [Range(2f, 8f)]
     [SerializeField] private float centerLaneWidth = 5f;
 
@@ -80,20 +80,20 @@ public class FormationManager : MonoBehaviour
     {
         [Header("Forward Positions (relative to reference point)")]
         [Tooltip("Center position offset")]
-        public Vector2 centerOffset = new Vector2(-5, 0);      // Trail behind puck carrier (X = back/forward)
+        public Vector2 centerOffset = new Vector2(0, -5);      // Trail behind (Y = back toward own goal)
 
         [Tooltip("Left Wing position offset")]
-        public Vector2 leftWingOffset = new Vector2(0, -10);   // Left lane (Y = left/right), even with carrier
+        public Vector2 leftWingOffset = new Vector2(-10, 0);   // Left side (X = left/right), even depth
 
         [Tooltip("Right Wing position offset")]
-        public Vector2 rightWingOffset = new Vector2(0, 10);   // Right lane (Y = left/right), even with carrier
+        public Vector2 rightWingOffset = new Vector2(10, 0);   // Right side (X = left/right), even depth
 
         [Header("Defense Positions (relative to reference point)")]
         [Tooltip("Left Defense position offset")]
-        public Vector2 leftDefenseOffset = new Vector2(-10, -6);  // Left defensive zone (X = back, Y = left)
+        public Vector2 leftDefenseOffset = new Vector2(-6, -10);  // Left side, back (Y = toward own goal)
 
         [Tooltip("Right Defense position offset")]
-        public Vector2 rightDefenseOffset = new Vector2(-10, 6);  // Right defensive zone (X = back, Y = right)
+        public Vector2 rightDefenseOffset = new Vector2(6, -10);  // Right side, back (Y = toward own goal)
     }
 
     private void Awake()
@@ -133,12 +133,12 @@ public class FormationManager : MonoBehaviour
             offensiveFormation = new FormationOffsets
             {
                 // Offensive: Spread wide, stay even with puck carrier
-                // X = forward/back (ice length), Y = left/right (ice width)
-                centerOffset = new Vector2(-5, 0),        // Trail behind for drop passes
-                leftWingOffset = new Vector2(0, -10),     // Left lane, even with you
-                rightWingOffset = new Vector2(0, 10),     // Right lane, even with you
-                leftDefenseOffset = new Vector2(-12, -6), // Stay back (blue line), left side
-                rightDefenseOffset = new Vector2(-12, 6)  // Stay back (blue line), right side
+                // X = left/right on screen, Y = forward/back toward goals
+                centerOffset = new Vector2(0, -5),        // Trail behind for drop passes
+                leftWingOffset = new Vector2(-10, 0),     // Left side, even depth
+                rightWingOffset = new Vector2(10, 0),     // Right side, even depth
+                leftDefenseOffset = new Vector2(-6, -12), // Left side, stay back
+                rightDefenseOffset = new Vector2(6, -12)  // Right side, stay back
             };
         }
         if (defensiveFormation == null)
@@ -146,12 +146,12 @@ public class FormationManager : MonoBehaviour
             defensiveFormation = new FormationOffsets
             {
                 // Defensive: Collapse, protect goal
-                // X = forward/back, Y = left/right
-                centerOffset = new Vector2(-6, 0),        // Pressure puck carrier
+                // X = left/right, Y = forward/back
+                centerOffset = new Vector2(0, -6),        // Pressure puck carrier
                 leftWingOffset = new Vector2(-8, -8),     // Collapse to defensive zone
-                rightWingOffset = new Vector2(-8, 8),     // Collapse to defensive zone
-                leftDefenseOffset = new Vector2(-3, -5),  // Cover slot, left
-                rightDefenseOffset = new Vector2(-3, 5)   // Cover slot, right
+                rightWingOffset = new Vector2(8, -8),     // Collapse to defensive zone
+                leftDefenseOffset = new Vector2(-5, -3),  // Cover slot, left
+                rightDefenseOffset = new Vector2(5, -3)   // Cover slot, right
             };
         }
         if (neutralFormation == null)
@@ -159,12 +159,12 @@ public class FormationManager : MonoBehaviour
             neutralFormation = new FormationOffsets
             {
                 // Neutral: Balanced positioning
-                // X = forward/back, Y = left/right
-                centerOffset = new Vector2(-3, 0),        // Trail behind slightly
-                leftWingOffset = new Vector2(0, -10),     // Left lane, even
-                rightWingOffset = new Vector2(0, 10),     // Right lane, even
-                leftDefenseOffset = new Vector2(-8, -6),  // Stay back, left
-                rightDefenseOffset = new Vector2(-8, 6)   // Stay back, right
+                // X = left/right, Y = forward/back
+                centerOffset = new Vector2(0, -3),        // Trail behind slightly
+                leftWingOffset = new Vector2(-10, 0),     // Left side, even
+                rightWingOffset = new Vector2(10, 0),     // Right side, even
+                leftDefenseOffset = new Vector2(-6, -8),  // Left side, stay back
+                rightDefenseOffset = new Vector2(6, -8)   // Right side, stay back
             };
         }
 
@@ -311,7 +311,7 @@ public class FormationManager : MonoBehaviour
         {
             case PlayerRole.LeftDefense:
             case PlayerRole.RightDefense:
-                // Defensemen: Can't push past certain distance from own goal (X axis = forward)
+                // Defensemen: Can't push past certain distance from own goal (Y axis = toward goals)
                 float distanceFromOwnGoal = Vector2.Distance(targetPosition, ownGoal.position);
                 if (distanceFromOwnGoal > defenseMaxPushDistance)
                 {
@@ -320,30 +320,30 @@ public class FormationManager : MonoBehaviour
                     constrainedPosition = (Vector2)ownGoal.position + directionFromGoal * defenseMaxPushDistance;
                 }
 
-                // Also stay on their side (Y axis = left/right on vertical rink)
+                // Also stay on their side (X axis = left/right on screen)
                 if (role == PlayerRole.LeftDefense)
                 {
-                    constrainedPosition.y = Mathf.Min(constrainedPosition.y, -3f); // Stay on left (negative Y)
+                    constrainedPosition.x = Mathf.Min(constrainedPosition.x, -3f); // Stay on left (negative X)
                 }
                 else // RightDefense
                 {
-                    constrainedPosition.y = Mathf.Max(constrainedPosition.y, 3f); // Stay on right (positive Y)
+                    constrainedPosition.x = Mathf.Max(constrainedPosition.x, 3f); // Stay on right (positive X)
                 }
                 break;
 
             case PlayerRole.LeftWing:
-                // Left wing: Stay in left lane (Y axis)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, -100f, -wingLaneWidth);
+                // Left wing: Stay in left lane (X axis = left/right on screen)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -100f, -wingLaneWidth);
                 break;
 
             case PlayerRole.RightWing:
-                // Right wing: Stay in right lane (Y axis)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, wingLaneWidth, 100f);
+                // Right wing: Stay in right lane (X axis = left/right on screen)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, wingLaneWidth, 100f);
                 break;
 
             case PlayerRole.Center:
-                // Center: Stay near center ice (don't drift too far left/right on Y axis)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, -centerLaneWidth, centerLaneWidth);
+                // Center: Stay near center ice (don't drift too far left/right on X axis)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -centerLaneWidth, centerLaneWidth);
                 break;
         }
 
