@@ -33,6 +33,22 @@ public class FormationManager : MonoBehaviour
     [Range(5f, 20f)]
     [SerializeField] private float formationSwitchDistance = 10f;
 
+    [Header("Zone Constraints")]
+    [Tooltip("Enable zone/lane constraints for realistic positioning")]
+    [SerializeField] private bool useZoneConstraints = true;
+
+    [Tooltip("Max distance defensemen can push forward (from own goal)")]
+    [Range(10f, 40f)]
+    [SerializeField] private float defenseMaxPushDistance = 25f;
+
+    [Tooltip("Max distance wings can drift from their lane (left/right)")]
+    [Range(3f, 12f)]
+    [SerializeField] private float wingLaneWidth = 8f;
+
+    [Tooltip("Max distance center can drift from center ice (left/right)")]
+    [Range(2f, 8f)]
+    [SerializeField] private float centerLaneWidth = 5f;
+
     // References
     private Transform puckTransform;
     private Transform playerGoal;  // Opponent's goal (teammates attack this)
@@ -62,14 +78,22 @@ public class FormationManager : MonoBehaviour
     [System.Serializable]
     public class FormationOffsets
     {
-        [Header("Forward Positions (relative to puck/puck carrier)")]
-        public Vector2 centerOffset = new Vector2(0, -3);      // Behind puck carrier
-        public Vector2 leftWingOffset = new Vector2(-8, 2);    // Left side, ahead
-        public Vector2 rightWingOffset = new Vector2(8, 2);    // Right side, ahead
+        [Header("Forward Positions (relative to reference point)")]
+        [Tooltip("Center position offset")]
+        public Vector2 centerOffset = new Vector2(0, -4);      // Trail behind puck carrier
 
-        [Header("Defense Positions (relative to own goal)")]
-        public Vector2 leftDefenseOffset = new Vector2(-5, -8);   // Left defensive zone
-        public Vector2 rightDefenseOffset = new Vector2(5, -8);   // Right defensive zone
+        [Tooltip("Left Wing position offset")]
+        public Vector2 leftWingOffset = new Vector2(-10, 3);   // Left lane, ahead
+
+        [Tooltip("Right Wing position offset")]
+        public Vector2 rightWingOffset = new Vector2(10, 3);   // Right lane, ahead
+
+        [Header("Defense Positions (relative to reference point)")]
+        [Tooltip("Left Defense position offset")]
+        public Vector2 leftDefenseOffset = new Vector2(-6, -10);  // Left defensive zone
+
+        [Tooltip("Right Defense position offset")]
+        public Vector2 rightDefenseOffset = new Vector2(6, -10);  // Right defensive zone
     }
 
     private void Awake()
@@ -103,18 +127,42 @@ public class FormationManager : MonoBehaviour
             playerGoal = goals[1].transform;
         }
 
-        // Initialize formation offsets with default values
+        // Initialize formation offsets with default values if not set
         if (offensiveFormation == null)
         {
-            offensiveFormation = new FormationOffsets();
+            offensiveFormation = new FormationOffsets
+            {
+                // Offensive: Spread out, push forward
+                centerOffset = new Vector2(0, -4),        // Trail for drop passes
+                leftWingOffset = new Vector2(-10, 3),     // Wide left, ahead
+                rightWingOffset = new Vector2(10, 3),     // Wide right, ahead
+                leftDefenseOffset = new Vector2(-6, -12), // Stay back (blue line)
+                rightDefenseOffset = new Vector2(6, -12)  // Stay back (blue line)
+            };
         }
         if (defensiveFormation == null)
         {
-            defensiveFormation = new FormationOffsets();
+            defensiveFormation = new FormationOffsets
+            {
+                // Defensive: Collapse, protect goal
+                centerOffset = new Vector2(0, -6),        // Pressure puck carrier
+                leftWingOffset = new Vector2(-8, -8),     // Collapse to defensive zone
+                rightWingOffset = new Vector2(8, -8),     // Collapse to defensive zone
+                leftDefenseOffset = new Vector2(-5, -3),  // Cover slot
+                rightDefenseOffset = new Vector2(5, -3)   // Cover slot
+            };
         }
         if (neutralFormation == null)
         {
-            neutralFormation = new FormationOffsets();
+            neutralFormation = new FormationOffsets
+            {
+                // Neutral: Balanced positioning
+                centerOffset = new Vector2(0, 0),
+                leftWingOffset = new Vector2(-10, 2),
+                rightWingOffset = new Vector2(10, 2),
+                leftDefenseOffset = new Vector2(-6, -8),
+                rightDefenseOffset = new Vector2(6, -8)
+            };
         }
 
         Debug.Log("FormationManager initialized");
@@ -215,7 +263,7 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get target formation position for a specific player role
+    /// Get target formation position for a specific player role (with zone constraints)
     /// </summary>
     public Vector2 GetFormationPosition(PlayerRole role)
     {
@@ -236,7 +284,67 @@ public class FormationManager : MonoBehaviour
         };
 
         // Calculate absolute position
-        return referencePoint + offset;
+        Vector2 targetPosition = referencePoint + offset;
+
+        // Apply zone constraints if enabled
+        if (useZoneConstraints)
+        {
+            targetPosition = ApplyZoneConstraints(targetPosition, role);
+        }
+
+        return targetPosition;
+    }
+
+    /// <summary>
+    /// Apply zone/lane constraints to keep players in realistic positions
+    /// </summary>
+    private Vector2 ApplyZoneConstraints(Vector2 targetPosition, PlayerRole role)
+    {
+        if (ownGoal == null) return targetPosition;
+
+        Vector2 constrainedPosition = targetPosition;
+
+        switch (role)
+        {
+            case PlayerRole.LeftDefense:
+            case PlayerRole.RightDefense:
+                // Defensemen: Can't push past certain distance from own goal
+                float distanceFromOwnGoal = Vector2.Distance(targetPosition, ownGoal.position);
+                if (distanceFromOwnGoal > defenseMaxPushDistance)
+                {
+                    // Clamp to max push distance
+                    Vector2 directionFromGoal = (targetPosition - (Vector2)ownGoal.position).normalized;
+                    constrainedPosition = (Vector2)ownGoal.position + directionFromGoal * defenseMaxPushDistance;
+                }
+
+                // Also stay on their side (left/right)
+                if (role == PlayerRole.LeftDefense)
+                {
+                    constrainedPosition.x = Mathf.Min(constrainedPosition.x, -3f); // Stay on left
+                }
+                else // RightDefense
+                {
+                    constrainedPosition.x = Mathf.Max(constrainedPosition.x, 3f); // Stay on right
+                }
+                break;
+
+            case PlayerRole.LeftWing:
+                // Left wing: Stay in left lane
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -100f, -wingLaneWidth);
+                break;
+
+            case PlayerRole.RightWing:
+                // Right wing: Stay in right lane
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, wingLaneWidth, 100f);
+                break;
+
+            case PlayerRole.Center:
+                // Center: Stay near center ice (don't drift too far left/right)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -centerLaneWidth, centerLaneWidth);
+                break;
+        }
+
+        return constrainedPosition;
     }
 
     /// <summary>
