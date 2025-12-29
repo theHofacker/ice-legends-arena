@@ -25,6 +25,9 @@ public class FormationManager : MonoBehaviour
     [SerializeField] private FormationOffsets neutralFormation;
 
     [Header("Formation Settings")]
+    [Tooltip("Defensive system to use (Box = passive, Sagging Zone = balanced, Arrow = aggressive)")]
+    [SerializeField] private DefensiveStyle defensiveStyle = DefensiveStyle.SaggingZone;
+
     [Tooltip("How smoothly positions update (higher = slower)")]
     [Range(0.1f, 5f)]
     [SerializeField] private float positionSmoothTime = 1f;
@@ -60,6 +63,14 @@ public class FormationManager : MonoBehaviour
         Offensive,  // Our team has puck - attack formation
         Defensive,  // Opponent has puck - defensive formation
         Neutral     // Loose puck - neutral formation
+    }
+
+    // Defensive zone system types (from Weiss Tech Playbook)
+    public enum DefensiveStyle
+    {
+        BoxPlusOne,        // PASSIVE: 4-player box, clogs slot (Simple Box from playbook)
+        SaggingZone,       // BALANCED: Weak-side forward sags to slot (Wedge Plus One)
+        SaggingZoneArrow   // AGGRESSIVE: High pressure, forward attacks at blueline
     }
 
     // Player positions/roles
@@ -311,6 +322,12 @@ public class FormationManager : MonoBehaviour
             offset = TransformOffsetForAttackDirection(offset);
         }
 
+        // Apply defensive style (for defensive formation)
+        if (currentFormation == FormationType.Defensive)
+        {
+            offset = ApplyDefensiveStyle(offset, role);
+        }
+
         // Calculate absolute position
         Vector2 targetPosition = referencePoint + offset;
         Vector2 beforeConstraints = targetPosition;
@@ -329,6 +346,121 @@ public class FormationManager : MonoBehaviour
         }
 
         return targetPosition;
+    }
+
+    /// <summary>
+    /// Apply defensive style modifications to formation offset
+    /// Based on Weiss Tech Playbook defensive systems
+    /// </summary>
+    private Vector2 ApplyDefensiveStyle(Vector2 baseOffset, PlayerRole role)
+    {
+        if (puckTransform == null || ownGoal == null) return baseOffset;
+
+        // Determine strong-side (side where puck is) vs weak-side
+        bool puckOnLeftSide = puckTransform.position.y > ownGoal.position.y;
+        bool isStrongSide = (puckOnLeftSide && (role == PlayerRole.LeftWing || role == PlayerRole.LeftDefense)) ||
+                            (!puckOnLeftSide && (role == PlayerRole.RightWing || role == PlayerRole.RightDefense));
+
+        switch (defensiveStyle)
+        {
+            case DefensiveStyle.BoxPlusOne:
+                // Simple Box: All 4 players form box in front of net (very passive)
+                // Tight box formation, protect slot
+                return ApplyBoxPlusOneStyle(baseOffset, role);
+
+            case DefensiveStyle.SaggingZone:
+                // Sagging Zone (Wedge Plus One): Weak-side forward sags to slot
+                // Strong-side forward pressures, weak-side forward helps defensemen
+                return ApplySaggingZoneStyle(baseOffset, role, isStrongSide);
+
+            case DefensiveStyle.SaggingZoneArrow:
+                // Sagging Zone Arrow: More aggressive, high pressure
+                // Similar to Sagging Zone but forwards push higher
+                return ApplySaggingZoneArrowStyle(baseOffset, role, isStrongSide);
+
+            default:
+                return baseOffset;
+        }
+    }
+
+    /// <summary>
+    /// Box +1: Passive box formation protecting slot
+    /// </summary>
+    private Vector2 ApplyBoxPlusOneStyle(Vector2 baseOffset, PlayerRole role)
+    {
+        // Modify offsets to create tight box in front of net
+        switch (role)
+        {
+            case PlayerRole.LeftWing:
+            case PlayerRole.RightWing:
+                // Forwards form top corners of box
+                return new Vector2(6, baseOffset.y * 0.8f); // Closer together
+
+            case PlayerRole.LeftDefense:
+            case PlayerRole.RightDefense:
+                // Defensemen form bottom corners of box (tight to net)
+                return new Vector2(2, baseOffset.y * 0.7f); // Very tight
+
+            default:
+                return baseOffset;
+        }
+    }
+
+    /// <summary>
+    /// Sagging Zone (Wedge Plus One): Weak-side forward sags to slot
+    /// </summary>
+    private Vector2 ApplySaggingZoneStyle(Vector2 baseOffset, PlayerRole role, bool isStrongSide)
+    {
+        // Strong-side forward: Pressure puck carrier (seam coverage)
+        // Weak-side forward: SAG down to slot to help defensemen
+        // Defensemen: Protect front of net
+
+        if (role == PlayerRole.LeftWing || role == PlayerRole.RightWing)
+        {
+            if (isStrongSide)
+            {
+                // Strong-side forward: Cover seam, pressure slightly
+                return new Vector2(baseOffset.x + 2, baseOffset.y); // Push out a bit
+            }
+            else
+            {
+                // Weak-side forward: SAG to slot (move closer to net, toward center)
+                return new Vector2(4, baseOffset.y * 0.5f); // Drop down to slot
+            }
+        }
+
+        // Defensemen: Stay tight to net
+        return baseOffset;
+    }
+
+    /// <summary>
+    /// Sagging Zone Arrow: Aggressive high pressure variant
+    /// </summary>
+    private Vector2 ApplySaggingZoneArrowStyle(Vector2 baseOffset, PlayerRole role, bool isStrongSide)
+    {
+        // Similar to Sagging Zone but forwards are more aggressive
+
+        if (role == PlayerRole.LeftWing || role == PlayerRole.RightWing)
+        {
+            if (isStrongSide)
+            {
+                // Strong-side forward: Aggressive pressure at blueline
+                return new Vector2(baseOffset.x + 5, baseOffset.y); // Push WAY out
+            }
+            else
+            {
+                // Weak-side forward: Still sags but a bit higher
+                return new Vector2(5, baseOffset.y * 0.6f); // Higher slot coverage
+            }
+        }
+
+        // Defensemen: Can push up slightly
+        if (role == PlayerRole.LeftDefense || role == PlayerRole.RightDefense)
+        {
+            return new Vector2(baseOffset.x + 1, baseOffset.y); // Slightly more aggressive
+        }
+
+        return baseOffset;
     }
 
     /// <summary>

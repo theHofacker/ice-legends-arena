@@ -11,11 +11,14 @@ public class AIController : MonoBehaviour
     [Tooltip("AI difficulty level")]
     public AIDifficulty difficulty = AIDifficulty.Medium;
 
-    [Tooltip("Player position/role")]
+    [Tooltip("Player position/role (legacy - use playerRole instead)")]
     public PlayerPosition position = PlayerPosition.Center;
 
     [Header("Formation Settings")]
-    [Tooltip("Home position for this AI (their zone)")]
+    [Tooltip("Player role for FormationManager (Center, LW, RW, LD, RD)")]
+    public FormationManager.PlayerRole playerRole = FormationManager.PlayerRole.Center;
+
+    [Tooltip("Home position for this AI (FALLBACK if no FormationManager)")]
     public Vector2 homePosition = Vector2.zero;
 
     [Tooltip("How far AI can chase from home position")]
@@ -449,9 +452,20 @@ public class AIController : MonoBehaviour
     {
         if (ownGoal == null) return;
 
-        // Position between puck and own goal
-        Vector2 puckToGoal = (ownGoal.position - puckTransform.position).normalized;
-        Vector2 defendPosition = (Vector2)puckTransform.position + puckToGoal * 3f; // 3 units in front of puck
+        // Use FormationManager if available, otherwise fallback to simple logic
+        Vector2 defendPosition;
+
+        if (FormationManager.Instance != null)
+        {
+            // Get formation position based on defensive system (Box +1, Sagging Zone, etc.)
+            defendPosition = FormationManager.Instance.GetFormationPosition(playerRole);
+        }
+        else
+        {
+            // FALLBACK: Position between puck and own goal (old logic)
+            Vector2 puckToGoal = (ownGoal.position - puckTransform.position).normalized;
+            defendPosition = (Vector2)puckTransform.position + puckToGoal * 3f; // 3 units in front of puck
+        }
 
         Vector2 direction = (defendPosition - (Vector2)transform.position).normalized;
         float distanceToPosition = Vector2.Distance(transform.position, defendPosition);
@@ -493,9 +507,49 @@ public class AIController : MonoBehaviour
 
         if (targetOpponent != null)
         {
-            // Move toward opponent to check them
+            // Get opponent's rigidbody for velocity info
+            Rigidbody2D opponentRb = targetOpponent.GetComponent<Rigidbody2D>();
+            Vector2 opponentVelocity = opponentRb != null ? opponentRb.linearVelocity : Vector2.zero;
+
+            // Evaluate Force vs Contain
+            PuckControlEvaluator.DefensiveAction action = PuckControlEvaluator.EvaluateDefense(
+                targetOpponent.transform.position,
+                opponentVelocity,
+                puckTransform.position,
+                puckRb.linearVelocity,
+                transform.position
+            );
+
+            // Get aggression level based on Force vs Contain
+            float aggressionLevel = PuckControlEvaluator.GetAggressionLevel(action);
+
+            // Move toward opponent based on aggression
             Vector2 direction = (targetOpponent.transform.position - transform.position).normalized;
-            rb.linearVelocity = direction * (moveSpeed * speedModifier * 1.1f); // Slightly faster when checking
+
+            if (action == PuckControlEvaluator.DefensiveAction.Force)
+            {
+                // FORCE: Attack aggressively - full speed
+                rb.linearVelocity = direction * (moveSpeed * speedModifier * 1.2f);
+                Debug.Log($"{gameObject.name} FORCING opponent (aggressive attack)");
+            }
+            else
+            {
+                // CONTAIN: Play passive - maintain gap, don't overcommit
+                float distanceToOpponent = Vector2.Distance(transform.position, targetOpponent.transform.position);
+
+                if (distanceToOpponent > 3f)
+                {
+                    // Too far, close the gap slowly
+                    rb.linearVelocity = direction * (moveSpeed * speedModifier * 0.6f);
+                }
+                else
+                {
+                    // Good gap, mirror opponent's movement (don't commit)
+                    rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 3f * Time.deltaTime);
+                }
+
+                Debug.Log($"{gameObject.name} CONTAINING opponent (passive defense, maintain gap)");
+            }
 
             // TODO: Execute actual check when close enough (will implement in Issue #43)
         }
@@ -503,17 +557,30 @@ public class AIController : MonoBehaviour
 
     private void ExecuteReturnToPosition()
     {
-        // Move back to home position
-        Vector2 direction = (homePosition - (Vector2)transform.position).normalized;
-        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+        // Use FormationManager if available, otherwise fallback to homePosition
+        Vector2 targetPosition;
 
-        if (distanceToHome > 1f)
+        if (FormationManager.Instance != null)
+        {
+            // Get formation position (could be offensive, defensive, or neutral)
+            targetPosition = FormationManager.Instance.GetFormationPosition(playerRole);
+        }
+        else
+        {
+            // FALLBACK: Use homePosition
+            targetPosition = homePosition;
+        }
+
+        Vector2 direction = (targetPosition - (Vector2)transform.position).normalized;
+        float distanceToTarget = Vector2.Distance(transform.position, targetPosition);
+
+        if (distanceToTarget > 1f)
         {
             rb.linearVelocity = direction * (moveSpeed * speedModifier);
         }
         else
         {
-            // Close enough to home, slow down
+            // Close enough to target, slow down
             rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
         }
     }
