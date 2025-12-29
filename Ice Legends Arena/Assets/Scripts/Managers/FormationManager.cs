@@ -119,14 +119,28 @@ public class FormationManager : MonoBehaviour
             puckTransform = puck.transform;
         }
 
-        // Find goals
+        // Find goals and assign based on X position
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
         if (goals.Length >= 2)
         {
-            // TODO: Assign goals based on team
-            // For now: bottom goal = our goal, top goal = opponent goal
-            ownGoal = goals[0].transform;
-            playerGoal = goals[1].transform;
+            // Determine which goal is which based on X position
+            // WestGoal (LEFT, negative X) = opponent goal (we attack this)
+            // EastGoal (RIGHT, positive X) = own goal (we defend this)
+
+            if (goals[0].transform.position.x < goals[1].transform.position.x)
+            {
+                // goals[0] is on LEFT (WestGoal)
+                playerGoal = goals[0].transform; // Attack left goal
+                ownGoal = goals[1].transform;     // Defend right goal
+                Debug.Log($"FormationManager: WestGoal (LEFT) = opponent goal at X:{playerGoal.position.x}, EastGoal (RIGHT) = own goal at X:{ownGoal.position.x}");
+            }
+            else
+            {
+                // goals[1] is on LEFT (WestGoal)
+                playerGoal = goals[1].transform; // Attack left goal
+                ownGoal = goals[0].transform;     // Defend right goal
+                Debug.Log($"FormationManager: WestGoal (LEFT) = opponent goal at X:{playerGoal.position.x}, EastGoal (RIGHT) = own goal at X:{ownGoal.position.x}");
+            }
         }
 
         // Initialize formation offsets with default values if not set
@@ -289,6 +303,8 @@ public class FormationManager : MonoBehaviour
             _ => Vector2.zero
         };
 
+        Vector2 originalOffset = offset;
+
         // Transform offset based on attack direction (for offensive formation)
         if (currentFormation == FormationType.Offensive)
         {
@@ -297,11 +313,19 @@ public class FormationManager : MonoBehaviour
 
         // Calculate absolute position
         Vector2 targetPosition = referencePoint + offset;
+        Vector2 beforeConstraints = targetPosition;
 
         // Apply zone constraints if enabled
         if (useZoneConstraints)
         {
             targetPosition = ApplyZoneConstraints(targetPosition, role);
+        }
+
+        // Debug logging (only log occasionally to avoid spam)
+        if (Time.frameCount % 60 == 0) // Log once per second at 60fps
+        {
+            Debug.Log($"[FormationManager] {role}: RefPoint={referencePoint}, BaseOffset={originalOffset}, " +
+                     $"TransformedOffset={offset}, Target={beforeConstraints}, Final={targetPosition}");
         }
 
         return targetPosition;
