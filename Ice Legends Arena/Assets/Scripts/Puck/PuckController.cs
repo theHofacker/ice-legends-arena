@@ -411,6 +411,9 @@ public class PuckController : MonoBehaviour
         isPossessed = true;
         rb.linearVelocity = Vector2.zero;
 
+        // Update player collider reference
+        playerCollider = owner.GetComponent<Collider2D>();
+
         // Disable collision
         if (puckCollider != null && playerCollider != null)
         {
@@ -422,6 +425,31 @@ public class PuckController : MonoBehaviour
         {
             puckRenderer.sortingOrder = 15;
         }
+    }
+
+    /// <summary>
+    /// Force immediate possession for current controlled player (for pass reception)
+    /// </summary>
+    public void ForceImmediatePossession()
+    {
+        if (playerTransform == null) return;
+
+        isPossessed = true;
+        rb.linearVelocity = Vector2.zero; // Stop puck completely
+
+        // Disable collision
+        if (puckCollider != null && playerCollider != null)
+        {
+            Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
+        }
+
+        // Render puck above player
+        if (puckRenderer != null)
+        {
+            puckRenderer.sortingOrder = 15;
+        }
+
+        Debug.Log($"Forced immediate possession for {playerTransform.name}");
     }
 
     private void OnDrawGizmosSelected()

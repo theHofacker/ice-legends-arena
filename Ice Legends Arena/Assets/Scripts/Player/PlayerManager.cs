@@ -240,6 +240,27 @@ public class PlayerManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Switch to a specific player by GameObject reference (for auto-switch on pass reception)
+    /// </summary>
+    public void SwitchToPlayerByGameObject(GameObject targetPlayer)
+    {
+        if (targetPlayer == null) return;
+
+        // Find the index of this player in teamPlayers list
+        int playerIndex = teamPlayers.IndexOf(targetPlayer);
+
+        if (playerIndex >= 0)
+        {
+            SwitchToPlayer(playerIndex);
+            Debug.Log($"Auto-switched to {targetPlayer.name} (pass receiver)");
+        }
+        else
+        {
+            Debug.LogWarning($"Cannot auto-switch: {targetPlayer.name} not found in team players list!");
+        }
+    }
+
+    /// <summary>
     /// Switch control to a specific player by index
     /// </summary>
     private void SwitchToPlayer(int playerIndex)

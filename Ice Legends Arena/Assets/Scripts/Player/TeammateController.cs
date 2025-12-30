@@ -295,6 +295,13 @@ public class TeammateController : MonoBehaviour
 
                     Debug.Log($"{gameObject.name} received the pass!");
 
+                    // AUTO-SWITCH to this player when they receive the pass
+                    if (PlayerManager.Instance != null && isAI && enabled)
+                    {
+                        // Find which player index this is and switch to them
+                        AutoSwitchToThisPlayer();
+                    }
+
                     // Visual feedback
                     if (spriteRenderer != null)
                     {
@@ -311,6 +318,40 @@ public class TeammateController : MonoBehaviour
             if (spriteRenderer != null)
             {
                 spriteRenderer.color = teammateColor;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Auto-switch to this player when they receive a pass
+    /// </summary>
+    private void AutoSwitchToThisPlayer()
+    {
+        if (PlayerManager.Instance == null) return;
+
+        // Switch control to this player (they just received the pass)
+        PlayerManager.Instance.SwitchToPlayerByGameObject(gameObject);
+
+        // Force immediate puck possession after switch (with small delay to ensure switch completes)
+        StartCoroutine(ForceImmediatePossessionAfterSwitch());
+    }
+
+    /// <summary>
+    /// Force puck possession after auto-switch completes
+    /// </summary>
+    private System.Collections.IEnumerator ForceImmediatePossessionAfterSwitch()
+    {
+        // Wait one frame to ensure player switch completes
+        yield return null;
+
+        // Find puck and force possession
+        GameObject puck = GameObject.FindGameObjectWithTag("Puck");
+        if (puck != null)
+        {
+            PuckController puckController = puck.GetComponent<PuckController>();
+            if (puckController != null)
+            {
+                puckController.ForceImmediatePossession();
             }
         }
     }
