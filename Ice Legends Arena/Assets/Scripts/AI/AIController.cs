@@ -452,19 +452,21 @@ public class AIController : MonoBehaviour
     {
         if (ownGoal == null) return;
 
-        // Use FormationManager if available, otherwise fallback to simple logic
+        // Use OPPONENT team's FormationManager (not player team!)
+        FormationManager opponentFormation = FormationManager.GetFormationManager(FormationManager.Team.Opponent);
         Vector2 defendPosition;
 
-        if (FormationManager.Instance != null)
+        if (opponentFormation != null)
         {
             // Get formation position based on defensive system (Box +1, Sagging Zone, etc.)
-            defendPosition = FormationManager.Instance.GetFormationPosition(playerRole);
+            defendPosition = opponentFormation.GetFormationPosition(playerRole);
         }
         else
         {
             // FALLBACK: Position between puck and own goal (old logic)
             Vector2 puckToGoal = (ownGoal.position - puckTransform.position).normalized;
             defendPosition = (Vector2)puckTransform.position + puckToGoal * 3f; // 3 units in front of puck
+            Debug.LogWarning("AIController: No OpponentFormationManager found! Using fallback positioning.");
         }
 
         Vector2 direction = (defendPosition - (Vector2)transform.position).normalized;
@@ -557,18 +559,20 @@ public class AIController : MonoBehaviour
 
     private void ExecuteReturnToPosition()
     {
-        // Use FormationManager if available, otherwise fallback to homePosition
+        // Use OPPONENT team's FormationManager (not player team!)
+        FormationManager opponentFormation = FormationManager.GetFormationManager(FormationManager.Team.Opponent);
         Vector2 targetPosition;
 
-        if (FormationManager.Instance != null)
+        if (opponentFormation != null)
         {
             // Get formation position (could be offensive, defensive, or neutral)
-            targetPosition = FormationManager.Instance.GetFormationPosition(playerRole);
+            targetPosition = opponentFormation.GetFormationPosition(playerRole);
         }
         else
         {
             // FALLBACK: Use homePosition
             targetPosition = homePosition;
+            Debug.LogWarning("AIController: No OpponentFormationManager found! Using homePosition fallback.");
         }
 
         Vector2 direction = (targetPosition - (Vector2)transform.position).normalized;

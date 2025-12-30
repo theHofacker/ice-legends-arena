@@ -5,10 +5,28 @@ using System.Collections.Generic;
 /// Manages team formations for hockey gameplay.
 /// Coordinates positioning for all teammates based on game state (offense/defense/neutral).
 /// Inspired by professional sports games like NHL, FIFA, etc.
+///
+/// TEAM-AWARE: Supports multiple teams (Player and Opponent) with separate formations.
+/// Use GetFormationManager(team) to get the appropriate formation manager.
 /// </summary>
 public class FormationManager : MonoBehaviour
 {
-    public static FormationManager Instance { get; private set; }
+    // Team enum
+    public enum Team
+    {
+        Player,   // Player's team (teammates)
+        Opponent  // Opponent's team (AI opponents)
+    }
+
+    // Multi-team support: store multiple formation managers by team
+    private static Dictionary<Team, FormationManager> formationManagers = new Dictionary<Team, FormationManager>();
+
+    // Legacy singleton support (defaults to Player team for backward compatibility)
+    public static FormationManager Instance => GetFormationManager(Team.Player);
+
+    [Header("Team Settings")]
+    [Tooltip("Which team does this FormationManager control?")]
+    [SerializeField] private Team team = Team.Player;
 
     [Header("Formation State")]
     [Tooltip("Current formation being used")]
@@ -111,14 +129,31 @@ public class FormationManager : MonoBehaviour
 
     private void Awake()
     {
-        // Singleton pattern
-        if (Instance != null && Instance != this)
+        // Register this formation manager for its team
+        if (formationManagers.ContainsKey(team))
         {
-            Destroy(gameObject);
-            return;
+            Debug.LogWarning($"FormationManager for team {team} already exists! Replacing...");
+            formationManagers[team] = this;
+        }
+        else
+        {
+            formationManagers.Add(team, this);
+            Debug.Log($"FormationManager registered for team {team}");
+        }
+    }
+
+    /// <summary>
+    /// Get the FormationManager for a specific team
+    /// </summary>
+    public static FormationManager GetFormationManager(Team requestedTeam)
+    {
+        if (formationManagers.TryGetValue(requestedTeam, out FormationManager manager))
+        {
+            return manager;
         }
 
-        Instance = this;
+        Debug.LogError($"No FormationManager found for team {requestedTeam}!");
+        return null;
     }
 
     private void Start()
@@ -130,27 +165,28 @@ public class FormationManager : MonoBehaviour
             puckTransform = puck.transform;
         }
 
-        // Find goals and assign based on X position
+        // Find goals and assign based on team
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
         if (goals.Length >= 2)
         {
-            // Determine which goal is which based on X position
-            // WestGoal (LEFT, negative X) = opponent goal (we attack this)
-            // EastGoal (RIGHT, positive X) = own goal (we defend this)
+            // Sort goals by X position (left to right)
+            Transform leftGoal = goals[0].transform.position.x < goals[1].transform.position.x ? goals[0].transform : goals[1].transform;
+            Transform rightGoal = goals[0].transform.position.x > goals[1].transform.position.x ? goals[0].transform : goals[1].transform;
 
-            if (goals[0].transform.position.x < goals[1].transform.position.x)
+            // Assign goals based on team
+            if (team == Team.Player)
             {
-                // goals[0] is on LEFT (WestGoal)
-                playerGoal = goals[0].transform; // Attack left goal
-                ownGoal = goals[1].transform;     // Defend right goal
-                Debug.Log($"FormationManager: WestGoal (LEFT) = opponent goal at X:{playerGoal.position.x}, EastGoal (RIGHT) = own goal at X:{ownGoal.position.x}");
+                // Player team: Attack LEFT goal (west), Defend RIGHT goal (east)
+                playerGoal = leftGoal;  // Attack left
+                ownGoal = rightGoal;    // Defend right
+                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
             }
-            else
+            else // Team.Opponent
             {
-                // goals[1] is on LEFT (WestGoal)
-                playerGoal = goals[1].transform; // Attack left goal
-                ownGoal = goals[0].transform;     // Defend right goal
-                Debug.Log($"FormationManager: WestGoal (LEFT) = opponent goal at X:{playerGoal.position.x}, EastGoal (RIGHT) = own goal at X:{ownGoal.position.x}");
+                // Opponent team: Attack RIGHT goal (east), Defend LEFT goal (west)
+                playerGoal = rightGoal; // Attack right
+                ownGoal = leftGoal;     // Defend left
+                Debug.Log($"[{team}] FormationManager: Attack RIGHT goal (X:{playerGoal.position.x}), Defend LEFT goal (X:{ownGoal.position.x})");
             }
         }
 
