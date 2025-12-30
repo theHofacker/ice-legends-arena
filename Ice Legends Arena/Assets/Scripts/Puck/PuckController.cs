@@ -127,8 +127,8 @@ public class PuckController : MonoBehaviour
     {
         float distance = Vector2.Distance(transform.position, playerTransform.position);
 
-        // Check if someone else has clearer possession than the controlled player
-        // Key insight: Only block if another entity is CLOSER and has clean control
+        // Check if an OPPONENT has clearer possession than the controlled player
+        // KEY CHANGE: Teammates share possession freely - only OPPONENTS block possession
         bool opponentHasPuck = false;
 
         // Only check if puck is slow enough to be possessed
@@ -163,29 +163,15 @@ public class PuckController : MonoBehaviour
                 }
             }
 
-            // Check TeammateController (AI teammates - don't let player steal from own teammates)
-            if (!opponentHasPuck)
-            {
-                TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
-                foreach (TeammateController teammate in teammates)
-                {
-                    if (!teammate.isAI || !teammate.enabled) continue; // Skip controlled player
-
-                    float distanceToTeammate = Vector2.Distance(transform.position, teammate.transform.position);
-                    // Only prevent if teammate is CLOSER than controlled player AND very close
-                    if (distanceToTeammate < distance && distanceToTeammate <= possessionRadius * 0.75f)
-                    {
-                        opponentHasPuck = true;
-                        break;
-                    }
-                }
-            }
+            // REMOVED: Teammate blocking check
+            // Teammates can freely share possession with controlled player
+            // This allows pass reception to work smoothly
         }
 
         // Only log when state CHANGES (not every frame)
         if (opponentHasPuck && !wasOpponentPossessionLastFrame)
         {
-            Debug.Log($"Someone else has puck - preventing steal (they're closer)");
+            Debug.Log($"Opponent has puck - preventing steal (they're closer)");
         }
         wasOpponentPossessionLastFrame = opponentHasPuck;
 
