@@ -228,15 +228,17 @@ public class PuckController : MonoBehaviour
         {
             timeSinceRelease += Time.deltaTime;
 
-            // Re-enable after 0.2 seconds OR when puck is far enough away
-            float distanceToPlayer = Vector2.Distance(transform.position, playerTransform.position);
-            if (timeSinceRelease > 0.2f || distanceToPlayer > 2f)
+            // Re-enable after 0.2 seconds OR when puck is far enough away from ANY entity
+            bool farEnoughAway = IsPuckFarFromAllEntities(2f);
+
+            if (timeSinceRelease > 0.2f || farEnoughAway)
             {
                 collisionDisabledAfterShot = false;
-                if (puckCollider != null && playerCollider != null)
-                {
-                    Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
-                }
+
+                // Re-enable collision with ALL entities (not just current player!)
+                ReEnableCollisionWithAllEntities();
+
+                Debug.Log("Puck collision re-enabled with all entities");
             }
         }
     }
@@ -272,6 +274,111 @@ public class PuckController : MonoBehaviour
             if (moveInput.magnitude > 0.1f)
             {
                 lastPlayerDirection = moveInput.normalized;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check if puck is far enough away from all entities (players, teammates, opponents)
+    /// </summary>
+    private bool IsPuckFarFromAllEntities(float minDistance)
+    {
+        // Check all players
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (GameObject player in players)
+        {
+            float distance = Vector2.Distance(transform.position, player.transform.position);
+            if (distance < minDistance)
+            {
+                return false; // Too close to a player
+            }
+        }
+
+        // Check all teammates
+        TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
+        foreach (TeammateController teammate in teammates)
+        {
+            float distance = Vector2.Distance(transform.position, teammate.transform.position);
+            if (distance < minDistance)
+            {
+                return false; // Too close to a teammate
+            }
+        }
+
+        // Check all AI opponents
+        AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
+        foreach (AIController ai in aiOpponents)
+        {
+            float distance = Vector2.Distance(transform.position, ai.transform.position);
+            if (distance < minDistance)
+            {
+                return false; // Too close to an opponent
+            }
+        }
+
+        // Check legacy opponents
+        OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
+        foreach (OpponentController opponent in opponents)
+        {
+            float distance = Vector2.Distance(transform.position, opponent.transform.position);
+            if (distance < minDistance)
+            {
+                return false; // Too close to an opponent
+            }
+        }
+
+        return true; // Far enough from everyone
+    }
+
+    /// <summary>
+    /// Re-enable collision with all entities (players, teammates, opponents)
+    /// Fixes bug where puck becomes untouchable after passing
+    /// </summary>
+    private void ReEnableCollisionWithAllEntities()
+    {
+        if (puckCollider == null) return;
+
+        // Re-enable collision with all players
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        foreach (GameObject player in players)
+        {
+            Collider2D playerCol = player.GetComponent<Collider2D>();
+            if (playerCol != null)
+            {
+                Physics2D.IgnoreCollision(puckCollider, playerCol, false);
+            }
+        }
+
+        // Re-enable collision with all teammates
+        TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
+        foreach (TeammateController teammate in teammates)
+        {
+            Collider2D teammateCol = teammate.GetComponent<Collider2D>();
+            if (teammateCol != null)
+            {
+                Physics2D.IgnoreCollision(puckCollider, teammateCol, false);
+            }
+        }
+
+        // Re-enable collision with all AI opponents
+        AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
+        foreach (AIController ai in aiOpponents)
+        {
+            Collider2D aiCol = ai.GetComponent<Collider2D>();
+            if (aiCol != null)
+            {
+                Physics2D.IgnoreCollision(puckCollider, aiCol, false);
+            }
+        }
+
+        // Re-enable collision with legacy opponents
+        OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
+        foreach (OpponentController opponent in opponents)
+        {
+            Collider2D opponentCol = opponent.GetComponent<Collider2D>();
+            if (opponentCol != null)
+            {
+                Physics2D.IgnoreCollision(puckCollider, opponentCol, false);
             }
         }
     }
