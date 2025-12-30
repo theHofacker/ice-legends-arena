@@ -52,11 +52,7 @@ public class PlayerManager : MonoBehaviour
     private void Start()
     {
         // Find puck
-        GameObject puck = GameObject.FindGameObjectWithTag("Puck");
-        if (puck != null)
-        {
-            puckTransform = puck.transform;
-        }
+        UpdatePuckReference();
 
         // Validate team setup
         if (teamPlayers.Count == 0)
@@ -78,6 +74,21 @@ public class PlayerManager : MonoBehaviour
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnSwitchRequested += HandleSwitchRequested;
+        }
+    }
+
+    /// <summary>
+    /// Update puck reference (in case it becomes null or stale)
+    /// </summary>
+    private void UpdatePuckReference()
+    {
+        if (puckTransform == null)
+        {
+            GameObject puck = GameObject.FindGameObjectWithTag("Puck");
+            if (puck != null)
+            {
+                puckTransform = puck.transform;
+            }
         }
     }
 
@@ -150,16 +161,34 @@ public class PlayerManager : MonoBehaviour
     /// </summary>
     private void SwitchToNearestToPuck()
     {
-        if (puckTransform == null || teamPlayers.Count == 0) return;
+        // Ensure we have a valid puck reference
+        UpdatePuckReference();
+
+        if (puckTransform == null)
+        {
+            Debug.LogWarning("PlayerManager: Cannot switch - puck reference is null!");
+            return;
+        }
+
+        if (teamPlayers.Count == 0)
+        {
+            Debug.LogWarning("PlayerManager: Cannot switch - no team players!");
+            return;
+        }
 
         int nearestIndex = 0;
         float nearestDistance = float.MaxValue;
 
+        // Find player nearest to puck
         for (int i = 0; i < teamPlayers.Count; i++)
         {
             if (teamPlayers[i] == null) continue;
 
             float distance = Vector2.Distance(teamPlayers[i].transform.position, puckTransform.position);
+
+            // Debug: Show distance for each player
+            Debug.Log($"  Player {i + 1} distance to puck: {distance:F2}");
+
             if (distance < nearestDistance)
             {
                 nearestDistance = distance;
@@ -167,8 +196,8 @@ public class PlayerManager : MonoBehaviour
             }
         }
 
+        Debug.Log($"→ Switching to Player {nearestIndex + 1} (nearest to puck at {nearestDistance:F2} units)");
         SwitchToPlayer(nearestIndex);
-        Debug.Log($"Switched to player nearest puck: Player {nearestIndex + 1}");
     }
 
     /// <summary>
