@@ -532,7 +532,6 @@ public class AIController : MonoBehaviour
             {
                 // FORCE: Attack aggressively - full speed
                 rb.linearVelocity = direction * (moveSpeed * speedModifier * 1.2f);
-                Debug.Log($"{gameObject.name} FORCING opponent (aggressive attack)");
             }
             else
             {
@@ -549,8 +548,6 @@ public class AIController : MonoBehaviour
                     // Good gap, mirror opponent's movement (don't commit)
                     rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 3f * Time.deltaTime);
                 }
-
-                Debug.Log($"{gameObject.name} CONTAINING opponent (passive defense, maintain gap)");
             }
 
             // TODO: Execute actual check when close enough (will implement in Issue #43)

@@ -374,12 +374,13 @@ public class FormationManager : MonoBehaviour
             targetPosition = ApplyZoneConstraints(targetPosition, role);
         }
 
-        // Debug logging (only log occasionally to avoid spam)
-        if (Time.frameCount % 60 == 0) // Log once per second at 60fps
-        {
-            Debug.Log($"[FormationManager] {role}: RefPoint={referencePoint}, BaseOffset={originalOffset}, " +
-                     $"TransformedOffset={offset}, Target={beforeConstraints}, Final={targetPosition}");
-        }
+        // Debug logging disabled to reduce console spam
+        // Uncomment for debugging formation positioning issues:
+        // if (Time.frameCount % 60 == 0) // Log once per second at 60fps
+        // {
+        //     Debug.Log($"[{team}] FormationManager {role}: RefPoint={referencePoint}, BaseOffset={originalOffset}, " +
+        //              $"TransformedOffset={offset}, Target={beforeConstraints}, Final={targetPosition}");
+        // }
 
         return targetPosition;
     }
