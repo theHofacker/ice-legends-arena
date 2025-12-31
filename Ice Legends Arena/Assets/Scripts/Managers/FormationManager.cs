@@ -290,14 +290,32 @@ public class FormationManager : MonoBehaviour
             }
         }
 
-        // Determine formation
+        // Determine formation based on which TEAM has possession
+        // IMPORTANT: Logic must be team-aware!
+        // - Player team: playerHasPuck = Offensive, opponentHasPuck = Defensive
+        // - Opponent team: playerHasPuck = Defensive, opponentHasPuck = Offensive (INVERTED!)
         FormationType targetFormation;
 
-        if (playerHasPuck)
+        bool weHavePuck, theyHavePuck;
+
+        if (team == Team.Player)
+        {
+            // Player team perspective
+            weHavePuck = playerHasPuck;
+            theyHavePuck = opponentHasPuck;
+        }
+        else // Team.Opponent
+        {
+            // Opponent team perspective (INVERTED)
+            weHavePuck = opponentHasPuck;
+            theyHavePuck = playerHasPuck;
+        }
+
+        if (weHavePuck)
         {
             targetFormation = FormationType.Offensive;
         }
-        else if (opponentHasPuck)
+        else if (theyHavePuck)
         {
             targetFormation = FormationType.Defensive;
         }
@@ -352,8 +370,10 @@ public class FormationManager : MonoBehaviour
 
         Vector2 originalOffset = offset;
 
-        // Transform offset based on attack direction (for offensive formation)
-        if (currentFormation == FormationType.Offensive)
+        // Transform offset based on attack direction (for both offensive AND defensive formations)
+        // Offensive: Formation relative to attack direction
+        // Defensive: Formation relative to goal being defended
+        if (currentFormation == FormationType.Offensive || currentFormation == FormationType.Defensive)
         {
             offset = TransformOffsetForAttackDirection(offset);
         }
