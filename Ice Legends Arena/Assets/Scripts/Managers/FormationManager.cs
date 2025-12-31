@@ -394,13 +394,12 @@ public class FormationManager : MonoBehaviour
             targetPosition = ApplyZoneConstraints(targetPosition, role);
         }
 
-        // Debug logging disabled to reduce console spam
-        // Uncomment for debugging formation positioning issues:
-        // if (Time.frameCount % 60 == 0) // Log once per second at 60fps
-        // {
-        //     Debug.Log($"[{team}] FormationManager {role}: RefPoint={referencePoint}, BaseOffset={originalOffset}, " +
-        //              $"TransformedOffset={offset}, Target={beforeConstraints}, Final={targetPosition}");
-        // }
+        // TEMPORARY DEBUG: Log formation positions to diagnose off-ice bug
+        if (Time.frameCount % 120 == 0) // Log twice per second at 60fps
+        {
+            Debug.Log($"[{team}] {currentFormation} {role}: Ref={referencePoint:F1}, BaseOff={originalOffset}, " +
+                     $"TransOff={offset}, BeforeConst={beforeConstraints:F1}, Final={targetPosition:F1}");
+        }
 
         return targetPosition;
     }
@@ -531,6 +530,13 @@ public class FormationManager : MonoBehaviour
 
         // Determine attack direction (from own goal to opponent goal)
         float attackDirectionX = playerGoal.position.x - ownGoal.position.x;
+
+        // TEMPORARY DEBUG
+        if (Time.frameCount % 240 == 0) // Log once every 4 seconds
+        {
+            Debug.Log($"[{team}] Transform: AttackGoal={playerGoal.position.x:F1}, OwnGoal={ownGoal.position.x:F1}, " +
+                     $"AttackDir={attackDirectionX:F1}, Flip={attackDirectionX < 0}");
+        }
 
         // If attacking LEFT (negative X), flip the X component of offset
         if (attackDirectionX < 0)
