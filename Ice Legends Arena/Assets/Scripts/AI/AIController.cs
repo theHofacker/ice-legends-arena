@@ -212,7 +212,15 @@ public class AIController : MonoBehaviour
         AIState previousState = currentState;
         AIState newState = DetermineState();
 
-        if (newState != previousState)
+        // HYSTERESIS: Prevent rapid state changes (state thrashing)
+        // Don't change state unless we've been in current state for minimum duration
+        float minStateDuration = 0.5f; // Must stay in a state for at least 0.5 seconds
+        float timeInCurrentState = Time.time - lastStateChangeTime;
+
+        // Exception: Always allow transitioning FROM Idle (no hysteresis for initial movement)
+        bool canChange = (previousState == AIState.Idle) || (timeInCurrentState >= minStateDuration);
+
+        if (newState != previousState && canChange)
         {
             currentState = newState;
             lastStateChangeTime = Time.time;
