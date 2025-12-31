@@ -370,18 +370,29 @@ public class FormationManager : MonoBehaviour
 
         Vector2 originalOffset = offset;
 
-        // Transform offset based on attack direction (for both offensive AND defensive formations)
-        // Offensive: Formation relative to attack direction
-        // Defensive: Formation relative to goal being defended
-        if (currentFormation == FormationType.Offensive || currentFormation == FormationType.Defensive)
+        // Transform offset based on formation type
+        if (currentFormation == FormationType.Offensive)
         {
+            // Offensive: Flip based on attack direction
             offset = TransformOffsetForAttackDirection(offset);
         }
-
-        // Apply defensive style (for defensive formation)
-        if (currentFormation == FormationType.Defensive)
+        else if (currentFormation == FormationType.Defensive)
         {
+            // Defensive: Flip based on which goal we DEFEND
+            // Defensive offsets are designed for defending RIGHT goal (positive X)
+            // If defending LEFT goal (negative X), flip the offset
+            if (ownGoal != null && ownGoal.position.x < 0)
+            {
+                offset = new Vector2(-offset.x, offset.y);
+            }
+
+            // Apply defensive style (Box+1, Sagging Zone, etc.)
             offset = ApplyDefensiveStyle(offset, role);
+        }
+        else if (currentFormation == FormationType.Neutral)
+        {
+            // Neutral: Flip based on attack direction (same as offensive)
+            offset = TransformOffsetForAttackDirection(offset);
         }
 
         // Calculate absolute position
