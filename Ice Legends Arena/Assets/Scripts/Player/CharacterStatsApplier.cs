@@ -19,7 +19,7 @@ public class CharacterStatsApplier : MonoBehaviour
     // Component references (will auto-find these)
     private PlayerController playerController;
     private ShootingController shootingController;
-    private BodyCheckController bodyCheckController;
+    private CheckingController checkingController;
     private PassingController passingController;
     private SpriteRenderer spriteRenderer;
 
@@ -51,7 +51,7 @@ public class CharacterStatsApplier : MonoBehaviour
     {
         playerController = GetComponent<PlayerController>();
         shootingController = GetComponent<ShootingController>();
-        bodyCheckController = GetComponent<BodyCheckController>();
+        checkingController = GetComponent<CheckingController>();
         passingController = GetComponent<PassingController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
@@ -125,12 +125,12 @@ public class CharacterStatsApplier : MonoBehaviour
     /// </summary>
     private void ApplyCheckingStats()
     {
-        if (bodyCheckController != null)
+        if (checkingController != null)
         {
             // Checking multiplier affects knockback force
-            bodyCheckController.checkForce *= characterData.checking;
+            checkingController.checkForce *= characterData.checking;
 
-            Debug.Log($"  Checking: {characterData.checking}x (final: {bodyCheckController.checkForce})");
+            Debug.Log($"  Checking: {characterData.checking}x (final: {checkingController.checkForce})");
         }
     }
 
