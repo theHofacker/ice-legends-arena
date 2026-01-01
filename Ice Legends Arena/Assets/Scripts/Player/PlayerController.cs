@@ -10,7 +10,7 @@ public class PlayerController : MonoBehaviour
     [Header("Movement Settings")]
     [Tooltip("Maximum movement speed in units per second")]
     [Range(1f, 20f)]
-    [SerializeField] private float maxSpeed = 5f;
+    public float moveSpeed = 5f; // Made public for CharacterStatsApplier
 
     [Tooltip("How quickly the player accelerates from rest")]
     [Range(0.1f, 30f)]
@@ -27,6 +27,7 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private InputManager inputManager;
     private SpriteRenderer spriteRenderer;
+    private ShootingController shootingController;
 
     private void Awake()
     {
@@ -46,6 +47,9 @@ public class PlayerController : MonoBehaviour
         {
             Debug.LogError("PlayerController: InputManager instance not found!");
         }
+
+        // Get ShootingController for checking shot charging state
+        shootingController = GetComponent<ShootingController>();
     }
 
     private void FixedUpdate()
@@ -64,8 +68,15 @@ public class PlayerController : MonoBehaviour
         // Get input from InputManager (already normalized -1 to 1)
         Vector2 moveInput = inputManager.MoveInput;
 
-        // Calculate target velocity based on input direction
-        Vector2 targetVelocity = moveInput * maxSpeed;
+        // Apply movement multiplier if charging a shot
+        float speedMultiplier = 1f;
+        if (shootingController != null && shootingController.IsChargingShot)
+        {
+            speedMultiplier = shootingController.ChargingMovementMultiplier;
+        }
+
+        // Calculate target velocity based on input direction and multiplier
+        Vector2 targetVelocity = moveInput * moveSpeed * speedMultiplier;
 
         // Choose acceleration or deceleration based on input presence
         // Deceleration is faster to allow for quick stops while maintaining ice slide feel
@@ -141,10 +152,10 @@ public class PlayerController : MonoBehaviour
     private void OnValidate()
     {
         // Ensure max speed is positive
-        if (maxSpeed <= 0)
+        if (moveSpeed <= 0)
         {
-            maxSpeed = 5f;
-            Debug.LogWarning("PlayerController: maxSpeed must be positive", this);
+            moveSpeed = 5f;
+            Debug.LogWarning("PlayerController: moveSpeed must be positive", this);
         }
 
         // Ensure acceleration/deceleration are positive

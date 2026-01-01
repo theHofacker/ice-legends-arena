@@ -30,7 +30,7 @@ public class CheckingController : MonoBehaviour
 
     [Tooltip("Knockback force applied to opponent")]
     [Range(10f, 50f)]
-    [SerializeField] private float bodyCheckKnockbackForce = 30f;
+    public float checkForce = 30f; // Made public for CharacterStatsApplier (renamed from bodyCheckKnockbackForce)
 
     [Tooltip("Opponent stun duration (seconds)")]
     [Range(1f, 5f)]
@@ -373,7 +373,7 @@ public class CheckingController : MonoBehaviour
                 Vector2 knockbackDirection = (opponent.transform.position - transform.position).normalized;
 
                 // Calculate final knockback force based on timing
-                float finalKnockbackForce = bodyCheckKnockbackForce * powerMultiplier;
+                float finalKnockbackForce = checkForce * powerMultiplier;
 
                 // Apply knockback force to opponent
                 Rigidbody2D opponentRb = opponent.GetComponent<Rigidbody2D>();

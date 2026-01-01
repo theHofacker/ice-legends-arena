@@ -112,11 +112,11 @@ public class CharacterStatsApplier : MonoBehaviour
             shootingController.wristShotPower *= characterData.shotPower;
             shootingController.slapShotPower *= characterData.shotPower;
 
-            // Accuracy affects aim spread (inverse relationship - higher accuracy = tighter spread)
-            float accuracyMultiplier = 1f / characterData.accuracy;
-            shootingController.maxAimSpread *= accuracyMultiplier;
+            // TODO: Accuracy affects aim spread (not yet implemented in ShootingController)
+            // float accuracyMultiplier = 1f / characterData.accuracy;
+            // shootingController.maxAimSpread *= accuracyMultiplier;
 
-            Debug.Log($"  Shot Power: {characterData.shotPower}x, Accuracy: {characterData.accuracy}x");
+            Debug.Log($"  Shot Power: {characterData.shotPower}x");
         }
     }
 

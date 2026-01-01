@@ -9,11 +9,11 @@ public class PassingController : MonoBehaviour
     [Header("Pass Power Settings")]
     [Tooltip("Power for basic tap pass")]
     [Range(5f, 30f)]
-    [SerializeField] private float basicPassPower = 20f;
+    public float passPower = 20f; // Made public for CharacterStatsApplier (renamed from basicPassPower)
 
-    [Tooltip("Power multiplier for saucer pass (hold)")]
+    [Tooltip("Power for saucer pass")]
     [Range(1.2f, 2.5f)]
-    [SerializeField] private float saucerPassMultiplier = 1.5f;
+    public float saucerPassPower = 1.5f; // Made public for CharacterStatsApplier (renamed from saucerPassMultiplier)
 
     [Tooltip("Vertical force for saucer pass arc")]
     [Range(5f, 25f)]
@@ -262,13 +262,13 @@ public class PassingController : MonoBehaviour
             Vector2 passDirection = (targetTeammate.position - transform.position).normalized;
 
             // Apply pass force to puck
-            ApplyPassForce(passDirection, basicPassPower);
+            ApplyPassForce(passDirection, passPower);
 
             // Track pass for one-timer setup
             lastPassTarget = targetTeammate;
             lastPassTime = Time.time;
 
-            Debug.Log($"Pass to {targetTeammate.name}! Power: {basicPassPower}");
+            Debug.Log($"Pass to {targetTeammate.name}! Power: {passPower}");
         }
         else
         {
@@ -289,7 +289,7 @@ public class PassingController : MonoBehaviour
             Vector2 passDirection = (targetTeammate.position - transform.position).normalized;
 
             // Calculate pass power with timing multiplier
-            float basePower = basicPassPower * saucerPassMultiplier;
+            float basePower = passPower * saucerPassPower;
             float finalPower = basePower * powerMultiplier;
 
             // Apply arc trajectory (horizontal + vertical)
