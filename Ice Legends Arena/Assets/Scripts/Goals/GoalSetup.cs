@@ -58,6 +58,9 @@ public class GoalSetup : MonoBehaviour
         // Create scoring trigger zone (invisible, inside the goal)
         CreateScoringTrigger(goal.transform, width, depth, side, name);
 
+        // Create net physics zone (slows down pucks)
+        CreateNetPhysicsZone(goal.transform, width, depth);
+
         // Create solid goal frame (posts and crossbar)
         CreateSolidGoalFrame(goal.transform, width, depth);
 
@@ -82,6 +85,21 @@ public class GoalSetup : MonoBehaviour
         goalTrigger.GetType().GetField("goalName", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(goalTrigger, goalName);
     }
 
+    private static void CreateNetPhysicsZone(Transform parent, float width, float depth)
+    {
+        GameObject netZone = new GameObject("NetPhysicsZone");
+        netZone.transform.SetParent(parent);
+        netZone.transform.localPosition = Vector3.zero;
+
+        // Net zone covers the entire goal interior
+        BoxCollider2D netCollider = netZone.AddComponent<BoxCollider2D>();
+        netCollider.size = new Vector2(depth, width);
+        netCollider.isTrigger = true;
+
+        // Add net physics script to slow down pucks
+        netZone.AddComponent<NetPhysics>();
+    }
+
     private static void CreateSolidGoalFrame(Transform parent, float width, float depth)
     {
         GameObject frame = new GameObject("GoalFrame_Solid");
@@ -100,13 +118,13 @@ public class GoalSetup : MonoBehaviour
         float frameOffset = -halfDepth * 0.6f; // Shift toward back of goal
 
         // LEFT SIDE POST (bottom post) - runs along the depth of the goal
-        CreatePost(frame.transform, "LeftSidePost", new Vector2(frameOffset, -halfWidth - postWidth/2), new Vector2(depth + postWidth, postWidth), false);
+        CreatePost(frame.transform, "LeftSidePost", new Vector2(frameOffset, -halfWidth - postWidth/2), new Vector2(depth + postWidth, postWidth), false, false);
 
         // RIGHT SIDE POST (top post) - runs along the depth of the goal
-        CreatePost(frame.transform, "RightSidePost", new Vector2(frameOffset, halfWidth + postWidth/2), new Vector2(depth + postWidth, postWidth), false);
+        CreatePost(frame.transform, "RightSidePost", new Vector2(frameOffset, halfWidth + postWidth/2), new Vector2(depth + postWidth, postWidth), false, false);
 
-        // BACK WALL - runs across the width at the back of the goal
-        CreatePost(frame.transform, "BackWall", new Vector2(-halfDepth + frameOffset - postWidth/2, 0), new Vector2(postWidth, width + postWidth * 2), false);
+        // BACK WALL - runs across the width at the back of the goal (absorbs pucks, no bounce)
+        CreatePost(frame.transform, "BackWall", new Vector2(-halfDepth + frameOffset - postWidth/2, 0), new Vector2(postWidth, width + postWidth * 2), false, true);
 
         // FRONT opening barrier - blocks players but allows pucks through
         GameObject frontBarrier = new GameObject("FrontBarrier_PlayersOnly");
@@ -132,7 +150,7 @@ public class GoalSetup : MonoBehaviour
         FrontBarrierTrigger barrierScript = frontBarrier.AddComponent<FrontBarrierTrigger>();
     }
 
-    private static void CreatePost(Transform parent, string name, Vector2 position, Vector2 size, bool isPuckPassable)
+    private static void CreatePost(Transform parent, string name, Vector2 position, Vector2 size, bool isPuckPassable, bool isBackWall = false)
     {
         GameObject post = new GameObject(name);
         post.transform.SetParent(parent);
@@ -160,10 +178,19 @@ public class GoalSetup : MonoBehaviour
 
         if (!isPuckPassable)
         {
-            // Solid posts - bounce pucks realistically
-            PhysicsMaterial2D postMaterial = new PhysicsMaterial2D("PostMaterial");
-            postMaterial.friction = 0.1f;
-            postMaterial.bounciness = 0.7f; // Posts are bouncy
+            PhysicsMaterial2D postMaterial = new PhysicsMaterial2D(isBackWall ? "BackWallMaterial" : "PostMaterial");
+            if (isBackWall)
+            {
+                // Back wall absorbs shots - no bounce
+                postMaterial.friction = 0.5f;
+                postMaterial.bounciness = 0.0f; // Zero bounce - puck stops
+            }
+            else
+            {
+                // Side posts - some bounce for realistic deflections
+                postMaterial.friction = 0.2f;
+                postMaterial.bounciness = 0.3f;
+            }
             collider.sharedMaterial = postMaterial;
         }
     }
