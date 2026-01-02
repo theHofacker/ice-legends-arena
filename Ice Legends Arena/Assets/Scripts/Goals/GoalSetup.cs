@@ -41,22 +41,24 @@ public class GoalSetup : MonoBehaviour
         }
 
         // Create East and West goals (goals are at left and right ends)
-        CreateGoal(goalsContainer.transform, "WestGoal", new Vector3(-goalXPosition, 0, 0), goalWidth, goalHeight, goalDepth, GoalTrigger.TeamSide.West);
-        CreateGoal(goalsContainer.transform, "EastGoal", new Vector3(goalXPosition, 0, 0), goalWidth, goalHeight, goalDepth, GoalTrigger.TeamSide.East);
+        // West goal (left) = Player defends this = isPlayerGoal = true
+        // East goal (right) = Opponent defends this = isPlayerGoal = false
+        CreateGoal(goalsContainer.transform, "WestGoal", new Vector3(-goalXPosition, 0, 0), goalWidth, goalHeight, goalDepth, true);
+        CreateGoal(goalsContainer.transform, "EastGoal", new Vector3(goalXPosition, 0, 0), goalWidth, goalHeight, goalDepth, false);
 
         Debug.Log("Hockey goals created successfully!");
         Debug.Log($"Goal dimensions: {goalWidth}m (w) x {goalHeight}m (h) x {goalDepth}m (d)");
         Debug.Log($"Goals positioned {goalLineDistance}m from end boards");
     }
 
-    private static void CreateGoal(Transform parent, string name, Vector3 position, float width, float height, float depth, GoalTrigger.TeamSide side)
+    private static void CreateGoal(Transform parent, string name, Vector3 position, float width, float height, float depth, bool isPlayerGoal)
     {
         GameObject goal = new GameObject(name);
         goal.transform.position = position;  // Set position BEFORE parenting to ensure correct world position
         goal.transform.SetParent(parent, true);  // worldPositionStays = true
 
         // Create scoring trigger zone (invisible, inside the goal)
-        CreateScoringTrigger(goal.transform, width, depth, side, name);
+        CreateScoringTrigger(goal.transform, width, depth, isPlayerGoal, name);
 
         // Create net physics zone (slows down pucks)
         CreateNetPhysicsZone(goal.transform, width, depth);
@@ -65,10 +67,10 @@ public class GoalSetup : MonoBehaviour
         CreateSolidGoalFrame(goal.transform, width, depth);
 
         // Create visual goal posts and net
-        CreateGoalVisuals(goal.transform, width, height, depth, side);
+        CreateGoalVisuals(goal.transform, width, height, depth, isPlayerGoal);
     }
 
-    private static void CreateScoringTrigger(Transform parent, float width, float depth, GoalTrigger.TeamSide side, string goalName)
+    private static void CreateScoringTrigger(Transform parent, float width, float depth, bool isPlayerGoal, string goalName)
     {
         GameObject trigger = new GameObject("ScoringTrigger");
         trigger.transform.SetParent(parent);
@@ -81,8 +83,8 @@ public class GoalSetup : MonoBehaviour
 
         // Add goal trigger script to detect scoring
         GoalTrigger goalTrigger = trigger.AddComponent<GoalTrigger>();
-        goalTrigger.GetType().GetField("goalSide", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(goalTrigger, side);
-        goalTrigger.GetType().GetField("goalName", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(goalTrigger, goalName);
+        // Use reflection to set the private isPlayerGoal field
+        goalTrigger.GetType().GetField("isPlayerGoal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(goalTrigger, isPlayerGoal);
     }
 
     private static void CreateNetPhysicsZone(Transform parent, float width, float depth)
@@ -201,7 +203,7 @@ public class GoalSetup : MonoBehaviour
         return UnityEditor.AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd");
     }
 
-    private static void CreateGoalVisuals(Transform parent, float width, float height, float depth, GoalTrigger.TeamSide side)
+    private static void CreateGoalVisuals(Transform parent, float width, float height, float depth, bool isPlayerGoal)
     {
         // Create goal frame using LineRenderer
         GameObject frame = new GameObject("GoalFrame");
@@ -235,13 +237,13 @@ public class GoalSetup : MonoBehaviour
         lineRenderer.SetPositions(framePoints);
 
         // Create net visualization using multiple lines
-        CreateNetLines(parent, width, depth, side);
+        CreateNetLines(parent, width, depth, isPlayerGoal);
 
         // Create goal line (the red line at the goal mouth)
-        CreateGoalLine(parent, width, side);
+        CreateGoalLine(parent, width, isPlayerGoal);
     }
 
-    private static void CreateNetLines(Transform parent, float width, float depth, GoalTrigger.TeamSide side)
+    private static void CreateNetLines(Transform parent, float width, float depth, bool isPlayerGoal)
     {
         GameObject net = new GameObject("Net");
         net.transform.SetParent(parent);
@@ -301,7 +303,7 @@ public class GoalSetup : MonoBehaviour
         }
     }
 
-    private static void CreateGoalLine(Transform parent, float width, GoalTrigger.TeamSide side)
+    private static void CreateGoalLine(Transform parent, float width, bool isPlayerGoal)
     {
         GameObject goalLine = new GameObject("GoalLine");
         goalLine.transform.SetParent(parent);
@@ -319,9 +321,9 @@ public class GoalSetup : MonoBehaviour
 
         float halfWidth = width / 2f;  // Y dimension
         // Goal line at the goal plane (4m from boards)
-        // For West goal (left), line is at right side of goal (toward center)
-        // For East goal (right), line is at left side of goal (toward center)
-        float lineX = side == GoalTrigger.TeamSide.West ? 0.5f : -0.5f;
+        // For West goal (left/player defends), line is at right side of goal (toward center)
+        // For East goal (right/opponent defends), line is at left side of goal (toward center)
+        float lineX = isPlayerGoal ? 0.5f : -0.5f;
 
         lr.positionCount = 2;
         lr.SetPosition(0, new Vector3(lineX, -halfWidth, 0));
