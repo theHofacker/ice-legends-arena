@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
 /// <summary>
 /// Singleton GameManager that handles match flow, scoring, timer, and game state.
@@ -73,6 +74,9 @@ public class GameManager : MonoBehaviour
     private Transform playerTeam;
     private Transform opponentTeam;
 
+    // Face-off position storage
+    private Dictionary<GameObject, Vector2> initialPositions = new Dictionary<GameObject, Vector2>();
+
     // Events (for UI updates)
     public delegate void ScoreChangedDelegate(int playerScore, int opponentScore);
     public event ScoreChangedDelegate OnScoreChanged;
@@ -106,11 +110,37 @@ public class GameManager : MonoBehaviour
             Debug.LogError("GameManager: No puck found! Make sure puck has 'Puck' tag.");
         }
 
+        // Store initial face-off positions from scene
+        StoreInitialFaceOffPositions();
+
         // Initialize timer
         timeRemaining = matchDuration;
 
         // Start match with face-off
         StartMatch();
+    }
+
+    /// <summary>
+    /// Store the initial positions of all players from the scene setup
+    /// These will be used as face-off positions
+    /// </summary>
+    private void StoreInitialFaceOffPositions()
+    {
+        // Store all player team positions
+        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
+        foreach (TeammateController teammate in teammates)
+        {
+            initialPositions[teammate.gameObject] = teammate.transform.position;
+        }
+
+        // Store all opponent team positions
+        AIController[] opponents = FindObjectsOfType<AIController>();
+        foreach (AIController opponent in opponents)
+        {
+            initialPositions[opponent.gameObject] = opponent.transform.position;
+        }
+
+        Debug.Log($"Stored face-off positions for {initialPositions.Count} players");
     }
 
     private void Update()
@@ -267,99 +297,35 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Position all players (teammates and opponents) for face-off
+    /// Returns all players to their initial positions from scene setup
     /// </summary>
     private void PositionPlayersForFaceOff()
     {
-        // Position player team (using TeammateController components)
-        FormationManager playerFormation = FormationManager.GetFormationManager(FormationManager.Team.Player);
-        if (playerFormation != null)
+        int playersPositioned = 0;
+
+        // Position all players back to their stored initial positions
+        foreach (var kvp in initialPositions)
         {
-            PositionPlayerTeamForFaceOff(playerFormation);
-        }
+            GameObject player = kvp.Key;
+            Vector2 faceOffPosition = kvp.Value;
 
-        // Position opponent team (using AIController components)
-        FormationManager opponentFormation = FormationManager.GetFormationManager(FormationManager.Team.Opponent);
-        if (opponentFormation != null)
-        {
-            PositionOpponentTeamForFaceOff(opponentFormation);
-        }
-    }
-
-    /// <summary>
-    /// Position player team for face-off (teammates + controlled player)
-    /// </summary>
-    private void PositionPlayerTeamForFaceOff(FormationManager formation)
-    {
-        // Find all teammates (including the one player is currently controlling)
-        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
-
-        foreach (TeammateController teammate in teammates)
-        {
-            // Get player role
-            FormationManager.PlayerRole role = GetPlayerRole(teammate.gameObject);
-
-            // Get face-off position from formation manager
-            Vector2 faceOffPosition = formation.GetFaceOffPosition(role, centerIcePosition);
-
-            // Move player to face-off position
-            teammate.transform.position = faceOffPosition;
-
-            // Stop player movement
-            Rigidbody2D playerRb = teammate.GetComponent<Rigidbody2D>();
-            if (playerRb != null)
+            if (player != null)
             {
-                playerRb.linearVelocity = Vector2.zero;
+                // Move player to face-off position
+                player.transform.position = faceOffPosition;
+
+                // Stop player movement
+                Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
+                if (playerRb != null)
+                {
+                    playerRb.linearVelocity = Vector2.zero;
+                }
+
+                playersPositioned++;
             }
         }
 
-        Debug.Log("Player team positioned for face-off");
-    }
-
-    /// <summary>
-    /// Position opponent team for face-off
-    /// </summary>
-    private void PositionOpponentTeamForFaceOff(FormationManager formation)
-    {
-        // Find all AI opponents
-        AIController[] opponents = FindObjectsOfType<AIController>();
-
-        foreach (AIController opponent in opponents)
-        {
-            // Get player role
-            FormationManager.PlayerRole role = GetPlayerRole(opponent.gameObject);
-
-            // Get face-off position from formation manager
-            Vector2 faceOffPosition = formation.GetFaceOffPosition(role, centerIcePosition);
-
-            // Move opponent to face-off position
-            opponent.transform.position = faceOffPosition;
-
-            // Stop opponent movement
-            Rigidbody2D opponentRb = opponent.GetComponent<Rigidbody2D>();
-            if (opponentRb != null)
-            {
-                opponentRb.linearVelocity = Vector2.zero;
-            }
-        }
-
-        Debug.Log("Opponent team positioned for face-off");
-    }
-
-    /// <summary>
-    /// Determine player role from GameObject name or components
-    /// </summary>
-    private FormationManager.PlayerRole GetPlayerRole(GameObject player)
-    {
-        string playerName = player.name.ToLower();
-
-        if (playerName.Contains("center")) return FormationManager.PlayerRole.Center;
-        if (playerName.Contains("leftwing")) return FormationManager.PlayerRole.LeftWing;
-        if (playerName.Contains("rightwing")) return FormationManager.PlayerRole.RightWing;
-        if (playerName.Contains("leftdefense")) return FormationManager.PlayerRole.LeftDefense;
-        if (playerName.Contains("rightdefense")) return FormationManager.PlayerRole.RightDefense;
-
-        // Default to center if unknown
-        return FormationManager.PlayerRole.Center;
+        Debug.Log($"Positioned {playersPositioned} players for face-off");
     }
 
     /// <summary>
