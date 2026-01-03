@@ -692,23 +692,25 @@ public class FormationManager : MonoBehaviour
     /// </summary>
     public Vector2 GetFaceOffPosition(PlayerRole role, Vector2 centerIcePosition)
     {
-        // Determine which side we're on (left = negative X, right = positive X)
-        bool defendingLeft = (ownGoal != null && ownGoal.position.x < 0);
+        // Determine which side we're on based on which goal we defend
+        // If we defend right goal (positive X), we position to the RIGHT of center (positive X offset)
+        // If we defend left goal (negative X), we position to the LEFT of center (negative X offset)
+        bool defendingRightGoal = (ownGoal != null && ownGoal.position.x > 0);
 
         // Face-off formation positions (relative to center ice)
-        // Default positions assume defending RIGHT goal (attacking left)
+        // Players position themselves between center ice and their defensive goal
         Vector2 offset = role switch
         {
-            // Center: right at face-off circle (2m from center)
-            PlayerRole.Center => new Vector2(defendingLeft ? 2f : -2f, 0f),
+            // Center: at face-off circle (2m from center toward own goal)
+            PlayerRole.Center => new Vector2(defendingRightGoal ? 2f : -2f, 0f),
 
-            // Wings: on face-off dots (5m from center, 8m up/down)
-            PlayerRole.LeftWing => new Vector2(defendingLeft ? 5f : -5f, 8f),
-            PlayerRole.RightWing => new Vector2(defendingLeft ? 5f : -5f, -8f),
+            // Wings: on face-off dots (5m from center toward own goal, 8m up/down)
+            PlayerRole.LeftWing => new Vector2(defendingRightGoal ? 5f : -5f, 8f),
+            PlayerRole.RightWing => new Vector2(defendingRightGoal ? 5f : -5f, -8f),
 
-            // Defense: back from face-off (12m from center, 6m up/down)
-            PlayerRole.LeftDefense => new Vector2(defendingLeft ? 12f : -12f, 6f),
-            PlayerRole.RightDefense => new Vector2(defendingLeft ? 12f : -12f, -6f),
+            // Defense: back from face-off (12m from center toward own goal, 6m up/down)
+            PlayerRole.LeftDefense => new Vector2(defendingRightGoal ? 12f : -12f, 6f),
+            PlayerRole.RightDefense => new Vector2(defendingRightGoal ? 12f : -12f, -6f),
 
             _ => Vector2.zero
         };
