@@ -270,49 +270,79 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void PositionPlayersForFaceOff()
     {
-        // Position player team
+        // Position player team (using TeammateController components)
         FormationManager playerFormation = FormationManager.GetFormationManager(FormationManager.Team.Player);
         if (playerFormation != null)
         {
-            PositionTeamForFaceOff(playerFormation, "Player");
+            PositionPlayerTeamForFaceOff(playerFormation);
         }
 
-        // Position opponent team
+        // Position opponent team (using AIController components)
         FormationManager opponentFormation = FormationManager.GetFormationManager(FormationManager.Team.Opponent);
         if (opponentFormation != null)
         {
-            PositionTeamForFaceOff(opponentFormation, "Opponent");
+            PositionOpponentTeamForFaceOff(opponentFormation);
         }
     }
 
     /// <summary>
-    /// Position a specific team for face-off
+    /// Position player team for face-off (teammates + controlled player)
     /// </summary>
-    private void PositionTeamForFaceOff(FormationManager formation, string teamTag)
+    private void PositionPlayerTeamForFaceOff(FormationManager formation)
     {
-        // Find all players on this team
-        GameObject[] teamPlayers = GameObject.FindGameObjectsWithTag(teamTag);
+        // Find all teammates (including the one player is currently controlling)
+        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
 
-        foreach (GameObject player in teamPlayers)
+        foreach (TeammateController teammate in teammates)
         {
             // Get player role
-            FormationManager.PlayerRole role = GetPlayerRole(player);
+            FormationManager.PlayerRole role = GetPlayerRole(teammate.gameObject);
 
             // Get face-off position from formation manager
             Vector2 faceOffPosition = formation.GetFaceOffPosition(role, centerIcePosition);
 
             // Move player to face-off position
-            player.transform.position = faceOffPosition;
+            teammate.transform.position = faceOffPosition;
 
             // Stop player movement
-            Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
+            Rigidbody2D playerRb = teammate.GetComponent<Rigidbody2D>();
             if (playerRb != null)
             {
                 playerRb.linearVelocity = Vector2.zero;
             }
         }
 
-        Debug.Log($"{teamTag} team positioned for face-off");
+        Debug.Log("Player team positioned for face-off");
+    }
+
+    /// <summary>
+    /// Position opponent team for face-off
+    /// </summary>
+    private void PositionOpponentTeamForFaceOff(FormationManager formation)
+    {
+        // Find all AI opponents
+        AIController[] opponents = FindObjectsOfType<AIController>();
+
+        foreach (AIController opponent in opponents)
+        {
+            // Get player role
+            FormationManager.PlayerRole role = GetPlayerRole(opponent.gameObject);
+
+            // Get face-off position from formation manager
+            Vector2 faceOffPosition = formation.GetFaceOffPosition(role, centerIcePosition);
+
+            // Move opponent to face-off position
+            opponent.transform.position = faceOffPosition;
+
+            // Stop opponent movement
+            Rigidbody2D opponentRb = opponent.GetComponent<Rigidbody2D>();
+            if (opponentRb != null)
+            {
+                opponentRb.linearVelocity = Vector2.zero;
+            }
+        }
+
+        Debug.Log("Opponent team positioned for face-off");
     }
 
     /// <summary>
