@@ -686,6 +686,36 @@ public class FormationManager : MonoBehaviour
     /// </summary>
     public FormationType CurrentFormation => currentFormation;
 
+    /// <summary>
+    /// Get face-off position for a specific player role
+    /// Traditional hockey face-off formation: centers at circle, wings on dots, defense back
+    /// </summary>
+    public Vector2 GetFaceOffPosition(PlayerRole role, Vector2 centerIcePosition)
+    {
+        // Determine which side we're on (left = negative X, right = positive X)
+        bool defendingLeft = (ownGoal != null && ownGoal.position.x < 0);
+
+        // Face-off formation positions (relative to center ice)
+        // Default positions assume defending RIGHT goal (attacking left)
+        Vector2 offset = role switch
+        {
+            // Center: right at face-off circle (2m from center)
+            PlayerRole.Center => new Vector2(defendingLeft ? 2f : -2f, 0f),
+
+            // Wings: on face-off dots (5m from center, 8m up/down)
+            PlayerRole.LeftWing => new Vector2(defendingLeft ? 5f : -5f, 8f),
+            PlayerRole.RightWing => new Vector2(defendingLeft ? 5f : -5f, -8f),
+
+            // Defense: back from face-off (12m from center, 6m up/down)
+            PlayerRole.LeftDefense => new Vector2(defendingLeft ? 12f : -12f, 6f),
+            PlayerRole.RightDefense => new Vector2(defendingLeft ? 12f : -12f, -6f),
+
+            _ => Vector2.zero
+        };
+
+        return centerIcePosition + offset;
+    }
+
     private void OnDrawGizmosSelected()
     {
         if (!Application.isPlaying) return;

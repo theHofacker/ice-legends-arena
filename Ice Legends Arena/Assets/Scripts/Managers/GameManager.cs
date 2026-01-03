@@ -258,10 +258,78 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // TODO: Position players for face-off (can be added later)
+        // Position all players for face-off
+        PositionPlayersForFaceOff();
 
         // Drop the puck and start play after delay
         Invoke(nameof(DropPuck), faceOffDelay);
+    }
+
+    /// <summary>
+    /// Position all players (teammates and opponents) for face-off
+    /// </summary>
+    private void PositionPlayersForFaceOff()
+    {
+        // Position player team
+        FormationManager playerFormation = FormationManager.GetFormationManager(FormationManager.Team.Player);
+        if (playerFormation != null)
+        {
+            PositionTeamForFaceOff(playerFormation, "Player");
+        }
+
+        // Position opponent team
+        FormationManager opponentFormation = FormationManager.GetFormationManager(FormationManager.Team.Opponent);
+        if (opponentFormation != null)
+        {
+            PositionTeamForFaceOff(opponentFormation, "Opponent");
+        }
+    }
+
+    /// <summary>
+    /// Position a specific team for face-off
+    /// </summary>
+    private void PositionTeamForFaceOff(FormationManager formation, string teamTag)
+    {
+        // Find all players on this team
+        GameObject[] teamPlayers = GameObject.FindGameObjectsWithTag(teamTag);
+
+        foreach (GameObject player in teamPlayers)
+        {
+            // Get player role
+            FormationManager.PlayerRole role = GetPlayerRole(player);
+
+            // Get face-off position from formation manager
+            Vector2 faceOffPosition = formation.GetFaceOffPosition(role, centerIcePosition);
+
+            // Move player to face-off position
+            player.transform.position = faceOffPosition;
+
+            // Stop player movement
+            Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
+            if (playerRb != null)
+            {
+                playerRb.linearVelocity = Vector2.zero;
+            }
+        }
+
+        Debug.Log($"{teamTag} team positioned for face-off");
+    }
+
+    /// <summary>
+    /// Determine player role from GameObject name or components
+    /// </summary>
+    private FormationManager.PlayerRole GetPlayerRole(GameObject player)
+    {
+        string playerName = player.name.ToLower();
+
+        if (playerName.Contains("center")) return FormationManager.PlayerRole.Center;
+        if (playerName.Contains("leftwing")) return FormationManager.PlayerRole.LeftWing;
+        if (playerName.Contains("rightwing")) return FormationManager.PlayerRole.RightWing;
+        if (playerName.Contains("leftdefense")) return FormationManager.PlayerRole.LeftDefense;
+        if (playerName.Contains("rightdefense")) return FormationManager.PlayerRole.RightDefense;
+
+        // Default to center if unknown
+        return FormationManager.PlayerRole.Center;
     }
 
     /// <summary>
