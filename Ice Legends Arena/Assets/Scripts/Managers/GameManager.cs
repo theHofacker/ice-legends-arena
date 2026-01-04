@@ -44,9 +44,13 @@ public class GameManager : MonoBehaviour
     [Tooltip("Center ice position for face-offs")]
     [SerializeField] private Vector2 centerIcePosition = Vector2.zero;
 
-    [Tooltip("Delay before face-off (seconds)")]
+    [Tooltip("Delay after goal before moving players to face-off (seconds)")]
     [Range(1f, 5f)]
     [SerializeField] private float faceOffDelay = 2f;
+
+    [Tooltip("Delay after positioning before dropping puck (seconds)")]
+    [Range(0.5f, 3f)]
+    [SerializeField] private float puckDropDelay = 1f;
 
     // Match state
     public enum MatchState
@@ -292,7 +296,7 @@ public class GameManager : MonoBehaviour
         PositionPlayersForFaceOff();
 
         // Drop the puck and start play after delay
-        Invoke(nameof(DropPuck), faceOffDelay);
+        Invoke(nameof(DropPuck), puckDropDelay);
     }
 
     /// <summary>
