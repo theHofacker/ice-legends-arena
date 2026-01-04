@@ -94,14 +94,59 @@ Complete in-game HUD with score, timer, pause button, and goal celebrations!
 
 ---
 
-### Step 6: Create Pause Menu Panel (Optional - for later)
+### Step 6: Create Pause Menu Panel
 
 1. **Right-click GameHUD** → **UI** → **Panel**
 2. **Rename it:** `PauseMenuPanel`
-3. **In Inspector**:
+3. **In Inspector (Image component)**:
    - Anchor Preset: **Stretch** (fill screen)
-   - Color: **Black**, Alpha: **0.8** (semi-transparent)
-4. **Add Resume/Restart buttons** (for later polish)
+   - Color: **Black**, Alpha: **0.8** (semi-transparent background)
+
+**Add Resume Button:**
+1. **Right-click PauseMenuPanel** → **UI** → **Button - TextMeshPro**
+2. **Rename it:** `ResumeButton`
+3. **In Inspector (RectTransform)**:
+   - Anchor Preset: **Middle Center**
+   - Pos Y: **50** (above center)
+   - Width: **250**, Height: **80**
+4. **Select child** `Text (TMP)`:
+   - Text: `RESUME`
+   - Font Size: **42**
+   - Color: **White**
+5. **In Inspector (Button component)**:
+   - Click **+** under **OnClick()**
+   - Drag **GameHUD** into the object field
+   - Function: **HUDManager** → **ResumeMatch()**
+
+**Add Restart Button:**
+1. **Right-click PauseMenuPanel** → **UI** → **Button - TextMeshPro**
+2. **Rename it:** `RestartButton`
+3. **In Inspector (RectTransform)**:
+   - Anchor Preset: **Middle Center**
+   - Pos Y: **-50** (below center)
+   - Width: **250**, Height: **80**
+4. **Select child** `Text (TMP)`:
+   - Text: `RESTART`
+   - Font Size: **42**
+   - Color: **White**
+5. **In Inspector (Button component)**:
+   - Click **+** under **OnClick()**
+   - Drag **GameHUD** into the object field
+   - Function: **HUDManager** → **RestartMatch()**
+
+**Add "PAUSED" Title Text:**
+1. **Right-click PauseMenuPanel** → **UI** → **Text - TextMeshPro**
+2. **Rename it:** `PausedTitleText`
+3. **In Inspector (RectTransform)**:
+   - Anchor Preset: **Top Center**
+   - Pos Y: **-150**
+   - Width: **400**, Height: **100**
+4. **In Inspector (TextMeshPro)**:
+   - Text: `PAUSED`
+   - Font Size: **72**
+   - Alignment: **Center & Middle**
+   - Color: **White**
+   - Font Style: **Bold**
 
 ---
 
@@ -155,10 +200,14 @@ You should see:
 ✅ Updates every second
 ```
 
-**Click Pause:**
+**Click Pause (or press ESC):**
 ```
-✅ Pause menu appears
+✅ Pause menu appears (black overlay)
 ✅ Game freezes (Time.timeScale = 0)
+✅ "PAUSED" title shows
+✅ Resume button works
+✅ Restart button works
+✅ ESC key toggles pause on/off
 ```
 
 ---

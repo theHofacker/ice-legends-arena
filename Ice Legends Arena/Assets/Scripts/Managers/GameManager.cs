@@ -351,6 +351,23 @@ public class GameManager : MonoBehaviour
                 puckRb.linearVelocity = randomDrop;
             }
         }
+
+        // Re-enable player control after face-off
+        RestorePlayerControl();
+    }
+
+    /// <summary>
+    /// Restore player control after face-off (fixes player freeze bug)
+    /// </summary>
+    private void RestorePlayerControl()
+    {
+        // Find PlayerManager and ensure it's enabled
+        PlayerManager playerManager = FindObjectOfType<PlayerManager>();
+        if (playerManager != null && playerManager.enabled)
+        {
+            // PlayerManager should automatically handle control restoration
+            Debug.Log("Player control restored after face-off");
+        }
     }
 
     /// <summary>

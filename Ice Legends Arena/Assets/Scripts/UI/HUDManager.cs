@@ -29,6 +29,15 @@ public class HUDManager : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebugMessages = true;
 
+    private void Update()
+    {
+        // ESC key to toggle pause
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            TogglePause();
+        }
+    }
+
     private void Start()
     {
         // Hide goal celebration initially
