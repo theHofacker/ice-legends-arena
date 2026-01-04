@@ -200,15 +200,16 @@ You should see:
 ✅ Updates every second
 ```
 
-**Click Pause (or press ESC):**
+**Click Pause:**
 ```
 ✅ Pause menu appears (black overlay)
 ✅ Game freezes (Time.timeScale = 0)
 ✅ "PAUSED" title shows
 ✅ Resume button works
 ✅ Restart button works
-✅ ESC key toggles pause on/off
 ```
+
+**Note:** ESC key support would require adding a Pause action to the InputSystem_Actions asset (uses new Unity Input System, not legacy Input class).
 
 ---
 

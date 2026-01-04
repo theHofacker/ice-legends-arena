@@ -29,14 +29,8 @@ public class HUDManager : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebugMessages = true;
 
-    private void Update()
-    {
-        // ESC key to toggle pause
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            TogglePause();
-        }
-    }
+    // Note: ESC key handling removed - use Pause button or add to InputSystem_Actions asset
+    // The new Unity Input System is configured in this project, not the legacy Input class
 
     private void Start()
     {
