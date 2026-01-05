@@ -131,14 +131,14 @@ public class GameManager : MonoBehaviour
     private void StoreInitialFaceOffPositions()
     {
         // Store all player team positions
-        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
+        TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
         foreach (TeammateController teammate in teammates)
         {
             initialPositions[teammate.gameObject] = teammate.transform.position;
         }
 
         // Store all opponent team positions
-        AIController[] opponents = FindObjectsOfType<AIController>();
+        AIController[] opponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         foreach (AIController opponent in opponents)
         {
             initialPositions[opponent.gameObject] = opponent.transform.position;
@@ -362,7 +362,7 @@ public class GameManager : MonoBehaviour
     private void RestorePlayerControl()
     {
         // Find PlayerManager and ensure it's enabled
-        PlayerManager playerManager = FindObjectOfType<PlayerManager>();
+        PlayerManager playerManager = FindAnyObjectByType<PlayerManager>();
         if (playerManager != null && playerManager.enabled)
         {
             // PlayerManager should automatically handle control restoration

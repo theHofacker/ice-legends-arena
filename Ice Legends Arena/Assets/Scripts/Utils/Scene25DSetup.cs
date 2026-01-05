@@ -73,7 +73,7 @@ public class Scene25DSetup : MonoBehaviour
     private static void SetupLighting()
     {
         // Find or create directional light
-        Light dirLight = Object.FindObjectOfType<Light>();
+        Light dirLight = Object.FindAnyObjectByType<Light>();
         if (dirLight == null)
         {
             GameObject lightObj = new GameObject("Directional Light");

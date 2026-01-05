@@ -29,7 +29,7 @@ public class ShotButtonChargeUI : MonoBehaviour
 
         if (timingMeter == null)
         {
-            timingMeter = FindObjectOfType<TimingMeter>();
+            timingMeter = FindAnyObjectByType<TimingMeter>();
         }
 
         if (timingMeter == null)

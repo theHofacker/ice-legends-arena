@@ -316,7 +316,7 @@ public class PassingController : MonoBehaviour
     private Transform FindNearestTeammate()
     {
         // Find all GameObjects with TeammateController component
-        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
+        TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
 
         Transform nearestTeammate = null;
         float nearestDistance = maxPassDistance;
@@ -404,7 +404,7 @@ public class PassingController : MonoBehaviour
     {
         // Find all players (including teammates) and disable collision with puck
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
-        TeammateController[] teammates = FindObjectsOfType<TeammateController>();
+        TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
 
         Collider2D puckCollider = puckTransform?.GetComponent<Collider2D>();
         if (puckCollider == null) yield break;

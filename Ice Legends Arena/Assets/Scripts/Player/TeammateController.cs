@@ -251,7 +251,7 @@ public class TeammateController : MonoBehaviour
     {
         if (puckTransform == null) return false;
 
-        TeammateController[] allTeammates = FindObjectsOfType<TeammateController>();
+        TeammateController[] allTeammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
         float myDistance = Vector2.Distance(transform.position, puckTransform.position);
 
         foreach (TeammateController teammate in allTeammates)

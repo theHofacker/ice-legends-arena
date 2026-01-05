@@ -40,7 +40,7 @@ public class TimingMeterUI : MonoBehaviour
         if (timingMeter == null)
         {
             // Try to find it automatically
-            timingMeter = FindObjectOfType<TimingMeter>();
+            timingMeter = FindAnyObjectByType<TimingMeter>();
         }
 
         if (timingMeter == null)

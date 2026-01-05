@@ -261,7 +261,7 @@ public class FormationManager : MonoBehaviour
         // Check if any teammate has puck
         if (!playerHasPuck)
         {
-            TeammateController[] teammates = FindObjectsOfType<TeammateController>();
+            TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
             foreach (TeammateController teammate in teammates)
             {
                 if (teammate.enabled && teammate.isAI)
@@ -279,7 +279,7 @@ public class FormationManager : MonoBehaviour
         // Check if opponent has puck
         if (!playerHasPuck)
         {
-            AIController[] opponents = FindObjectsOfType<AIController>();
+            AIController[] opponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
             foreach (AIController ai in opponents)
             {
                 if (ai.HasPuck)

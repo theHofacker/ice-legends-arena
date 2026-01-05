@@ -320,7 +320,7 @@ public class AIController : MonoBehaviour
     /// </summary>
     private bool IsNearestAIToPuck()
     {
-        AIController[] allAI = FindObjectsOfType<AIController>();
+        AIController[] allAI = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         float myDistance = Vector2.Distance(transform.position, puckTransform.position);
         float nearestDistance = myDistance;
 
@@ -344,7 +344,7 @@ public class AIController : MonoBehaviour
     /// </summary>
     private bool IsSignificantlyNearestAIToPuck()
     {
-        AIController[] allAI = FindObjectsOfType<AIController>();
+        AIController[] allAI = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         float myDistance = Vector2.Distance(transform.position, puckTransform.position);
 
         foreach (AIController ai in allAI)
@@ -369,7 +369,7 @@ public class AIController : MonoBehaviour
     /// </summary>
     private bool IsSignificantlyNearestAIToTarget(Vector3 targetPosition)
     {
-        AIController[] allAI = FindObjectsOfType<AIController>();
+        AIController[] allAI = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         float myDistance = Vector2.Distance(transform.position, targetPosition);
 
         foreach (AIController ai in allAI)

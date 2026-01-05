@@ -88,7 +88,7 @@ public class MeteorStrike : Ability
     private void StunNearbyOpponents(Vector2 position)
     {
         // Find all AI opponents
-        AIController[] opponents = FindObjectsOfType<AIController>();
+        AIController[] opponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
 
         int stunnedCount = 0;
 

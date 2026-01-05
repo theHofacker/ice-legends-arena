@@ -33,7 +33,7 @@ public class SimpleTimingMeterUI : MonoBehaviour
 
         if (timingMeter == null)
         {
-            timingMeter = FindObjectOfType<TimingMeter>();
+            timingMeter = FindAnyObjectByType<TimingMeter>();
         }
 
         if (timingMeter == null)
