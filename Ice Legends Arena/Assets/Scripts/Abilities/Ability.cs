@@ -19,7 +19,7 @@ public abstract class Ability : MonoBehaviour
     public AbilityData AbilityData => abilityData;
     public bool IsOnCooldown => isOnCooldown;
     public float CooldownRemaining => cooldownRemaining;
-    public float CooldownProgress => abilityData != null ? (1f - (cooldownRemaining / abilityData.cooldownDuration)) : 0f;
+    public float CooldownProgress => abilityData != null ? (1f - (cooldownRemaining / abilityData.cooldown)) : 0f;
 
     // Events
     public delegate void AbilityActivatedDelegate(Ability ability);
@@ -103,7 +103,7 @@ public abstract class Ability : MonoBehaviour
         if (abilityData != null)
         {
             isOnCooldown = true;
-            cooldownRemaining = abilityData.cooldownDuration;
+            cooldownRemaining = abilityData.cooldown;
             Debug.Log($"{abilityData.abilityName} on cooldown for {cooldownRemaining}s");
         }
     }
