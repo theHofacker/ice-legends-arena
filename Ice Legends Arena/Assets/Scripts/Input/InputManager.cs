@@ -15,6 +15,8 @@ public class InputManager : MonoBehaviour
 
     // Public API for accessing input
     public Vector2 MoveInput { get; private set; }
+    /// <summary>Joystick input mapped to 3D world space (X,0,Z)</summary>
+    public Vector3 MoveInputWorld => PhysicsHelper.InputToWorld(MoveInput);
     public bool IsJumpPressed => inputActions != null && inputActions.Player.Jump.triggered;
     public bool IsJumpHeld => inputActions != null && inputActions.Player.Jump.IsPressed();
     public bool IsAttackPressed => inputActions != null && inputActions.Player.Attack.triggered;

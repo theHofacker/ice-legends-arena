@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Singleton GameManager that handles match flow, scoring, timer, and game state.
 /// Controls the entire match from face-off to final whistle.
-/// 100% transferable to 3D - pure game logic!
+/// 3D Physics: Positions are Vector3 on XZ plane, Rigidbody for physics.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -41,8 +41,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private string opponentTeamName = "Opponent Team";
 
     [Header("Face-Off Settings")]
-    [Tooltip("Center ice position for face-offs")]
-    [SerializeField] private Vector2 centerIcePosition = Vector2.zero;
+    [Tooltip("Center ice position for face-offs (XZ plane, Y = 0)")]
+    [SerializeField] private Vector3 centerIcePosition = Vector3.zero;
 
     [Tooltip("Delay after goal before moving players to face-off (seconds)")]
     [Range(1f, 5f)]
@@ -78,8 +78,8 @@ public class GameManager : MonoBehaviour
     private Transform playerTeam;
     private Transform opponentTeam;
 
-    // Face-off position storage
-    private Dictionary<GameObject, Vector2> initialPositions = new Dictionary<GameObject, Vector2>();
+    // Face-off position storage (3D positions on XZ plane)
+    private Dictionary<GameObject, Vector3> initialPositions = new Dictionary<GameObject, Vector3>();
 
     // Events (for UI updates)
     public delegate void ScoreChangedDelegate(int playerScore, int opponentScore);
@@ -285,10 +285,11 @@ public class GameManager : MonoBehaviour
         if (puck != null)
         {
             puck.transform.position = centerIcePosition;
-            Rigidbody2D puckRb = puck.GetComponent<Rigidbody2D>();
+            Rigidbody puckRb = puck.GetComponent<Rigidbody>();
             if (puckRb != null)
             {
-                puckRb.linearVelocity = Vector2.zero;
+                puckRb.linearVelocity = Vector3.zero;
+                puckRb.angularVelocity = Vector3.zero;
             }
         }
 
@@ -311,7 +312,7 @@ public class GameManager : MonoBehaviour
         foreach (var kvp in initialPositions)
         {
             GameObject player = kvp.Key;
-            Vector2 faceOffPosition = kvp.Value;
+            Vector3 faceOffPosition = kvp.Value;
 
             if (player != null)
             {
@@ -319,10 +320,11 @@ public class GameManager : MonoBehaviour
                 player.transform.position = faceOffPosition;
 
                 // Stop player movement
-                Rigidbody2D playerRb = player.GetComponent<Rigidbody2D>();
+                Rigidbody playerRb = player.GetComponent<Rigidbody>();
                 if (playerRb != null)
                 {
-                    playerRb.linearVelocity = Vector2.zero;
+                    playerRb.linearVelocity = Vector3.zero;
+                    playerRb.angularVelocity = Vector3.zero;
                 }
 
                 playersPositioned++;
@@ -340,14 +342,14 @@ public class GameManager : MonoBehaviour
         Debug.Log("Puck drop! Play begins!");
         ChangeState(MatchState.Playing);
 
-        // Optional: Add small upward impulse to simulate puck drop
+        // Optional: Add small random impulse to simulate puck drop (on XZ plane)
         if (puck != null)
         {
-            Rigidbody2D puckRb = puck.GetComponent<Rigidbody2D>();
+            Rigidbody puckRb = puck.GetComponent<Rigidbody>();
             if (puckRb != null)
             {
-                // Small random velocity for realistic puck drop
-                Vector2 randomDrop = new Vector2(Random.Range(-1f, 1f), Random.Range(-1f, 1f));
+                // Small random velocity on XZ plane for realistic puck drop
+                Vector3 randomDrop = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
                 puckRb.linearVelocity = randomDrop;
             }
         }

@@ -2,10 +2,10 @@ using UnityEngine;
 
 /// <summary>
 /// Simple AI opponent for testing defensive mechanics (poke checks, body checks).
-/// Moves slowly with the puck, perfect target for defense practice.
+/// 3D physics: movement on XZ plane, Y = height.
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
-[RequireComponent(typeof(CircleCollider2D))]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(CapsuleCollider))]
 public class OpponentController : MonoBehaviour
 {
     [Header("Movement Settings")]
@@ -26,19 +26,19 @@ public class OpponentController : MonoBehaviour
     public Color opponentColor = Color.red;
 
     [Header("Starting Position")]
-    public Vector2 centerPoint = Vector2.zero;
+    public Vector3 centerPoint = Vector3.zero;
     public float circleRadius = 5f;
 
     // Component references
-    private Rigidbody2D rb;
+    private Rigidbody rb;
     private SpriteRenderer spriteRenderer;
     private Transform puckTransform;
-    private Rigidbody2D puckRb;
+    private Rigidbody puckRb;
 
     // State
     private bool hasPuck = false;
     private float angle = 0f;
-    private float possessionCooldown = 0f; // Prevent re-possessing after poke check
+    private float possessionCooldown = 0f;
 
     public enum MovementPattern
     {
@@ -50,19 +50,18 @@ public class OpponentController : MonoBehaviour
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
+        rb = GetComponent<Rigidbody>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        // Set up physics
-        rb.bodyType = RigidbodyType2D.Dynamic;
-        rb.gravityScale = 0;
-        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-        rb.linearDamping = 2f; // Some drag for realistic movement
+        // Set up 3D physics
+        rb.isKinematic = false;
+        rb.useGravity = false;
+        rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
+        rb.linearDamping = 2f;
     }
 
     private void Start()
     {
-        // Set opponent color
         if (spriteRenderer != null)
         {
             spriteRenderer.color = opponentColor;
@@ -73,11 +72,11 @@ public class OpponentController : MonoBehaviour
         if (puck != null)
         {
             puckTransform = puck.transform;
-            puckRb = puck.GetComponent<Rigidbody2D>();
+            puckRb = puck.GetComponent<Rigidbody>();
         }
 
         // Set starting position
-        if (centerPoint == Vector2.zero)
+        if (centerPoint == Vector3.zero)
         {
             centerPoint = transform.position;
         }
@@ -91,46 +90,37 @@ public class OpponentController : MonoBehaviour
     {
         if (puckTransform == null) return;
 
-        // Decrement cooldown
         if (possessionCooldown > 0f)
         {
             possessionCooldown -= Time.deltaTime;
         }
 
-        // Check for puck possession
         CheckPuckPossession();
 
-        // Move according to pattern
         if (!hasPuck)
         {
-            // Move to puck if don't have it
             MoveTowardPuck();
         }
         else
         {
-            // Move with puck
             MoveWithPattern();
         }
     }
 
     private void CheckPuckPossession()
     {
-        float distance = Vector2.Distance(transform.position, puckTransform.position);
+        float distance = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
-        // Auto-possess when close (only if cooldown expired)
         if (!hasPuck && distance <= possessionRadius && puckRb != null && possessionCooldown <= 0f)
         {
-            if (puckRb.linearVelocity.magnitude < 8f) // Only possess slow-moving pucks
+            if (PhysicsHelper.SpeedXZ(puckRb.linearVelocity) < 8f)
             {
                 hasPuck = true;
-
-                // Slow down puck
                 puckRb.linearVelocity *= 0.5f;
 
-                // Visual feedback
                 if (spriteRenderer != null)
                 {
-                    spriteRenderer.color = Color.yellow; // Change color when gets puck
+                    spriteRenderer.color = Color.yellow;
                 }
 
                 Debug.Log($"{gameObject.name} possessed puck");
@@ -138,9 +128,8 @@ public class OpponentController : MonoBehaviour
         }
         else if (hasPuck && distance > possessionRadius * 3)
         {
-            // Lost possession - set cooldown to prevent immediate re-possession
             hasPuck = false;
-            possessionCooldown = 1f; // 1 second cooldown
+            possessionCooldown = 1f;
 
             if (spriteRenderer != null)
             {
@@ -151,13 +140,10 @@ public class OpponentController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Public method to stun opponent (called by poke check)
-    /// </summary>
     public void ApplyPokeCheckStun()
     {
         hasPuck = false;
-        possessionCooldown = 1f; // 1 second cooldown
+        possessionCooldown = 1f;
 
         if (spriteRenderer != null)
         {
@@ -167,15 +153,17 @@ public class OpponentController : MonoBehaviour
         Debug.Log($"{gameObject.name} got poke checked! Stunned for 1s");
     }
 
-    /// <summary>
-    /// Public method to stun opponent with body check (knocked down)
-    /// </summary>
     public void ApplyBodyCheckStun(float stunDuration)
     {
         hasPuck = false;
         possessionCooldown = stunDuration;
 
-        // Visual feedback - flash red when body checked
+        Animator modelAnimator = GetComponentInChildren<Animator>();
+        if (modelAnimator != null)
+        {
+            modelAnimator.SetTrigger("GotHit");
+        }
+
         if (spriteRenderer != null)
         {
             StartCoroutine(FlashColorCoroutine(Color.red, stunDuration));
@@ -184,19 +172,15 @@ public class OpponentController : MonoBehaviour
         Debug.Log($"{gameObject.name} got BODY CHECKED! Stunned for {stunDuration}s");
     }
 
-    /// <summary>
-    /// Flash opponent color when stunned
-    /// </summary>
     private System.Collections.IEnumerator FlashColorCoroutine(Color flashColor, float duration)
     {
         if (spriteRenderer == null) yield break;
 
         float elapsed = 0f;
-        float flashSpeed = 5f; // How fast to flash
+        float flashSpeed = 5f;
 
         while (elapsed < duration)
         {
-            // Alternate between flash color and normal color
             float t = Mathf.PingPong(elapsed * flashSpeed, 1f);
             spriteRenderer.color = Color.Lerp(opponentColor, flashColor, t);
 
@@ -204,13 +188,12 @@ public class OpponentController : MonoBehaviour
             yield return null;
         }
 
-        // Restore original color
         spriteRenderer.color = opponentColor;
     }
 
     private void MoveTowardPuck()
     {
-        Vector2 direction = (puckTransform.position - transform.position).normalized;
+        Vector3 direction = PhysicsHelper.DirectionXZ(transform.position, puckTransform.position);
         rb.linearVelocity = direction * moveSpeed;
     }
 
@@ -231,15 +214,16 @@ public class OpponentController : MonoBehaviour
                 break;
 
             case MovementPattern.Stationary:
-                rb.linearVelocity = Vector2.zero;
+                rb.linearVelocity = Vector3.zero;
                 break;
         }
 
         // Make puck follow opponent
         if (puckTransform != null && hasPuck)
         {
-            Vector2 puckTargetPos = (Vector2)transform.position + rb.linearVelocity.normalized * 0.8f;
-            Vector2 puckDirection = (puckTargetPos - (Vector2)puckTransform.position);
+            Vector3 puckTargetPos = transform.position + PhysicsHelper.FlattenY(rb.linearVelocity).normalized * 0.8f;
+            Vector3 puckDirection = puckTargetPos - puckTransform.position;
+            puckDirection.y = 0f;
 
             if (puckRb != null)
             {
@@ -252,21 +236,23 @@ public class OpponentController : MonoBehaviour
     {
         angle += Time.deltaTime * (moveSpeed / circleRadius);
 
-        Vector2 targetPos = centerPoint + new Vector2(
+        // Circle on XZ plane
+        Vector3 targetPos = centerPoint + new Vector3(
             Mathf.Cos(angle) * circleRadius,
+            0f,
             Mathf.Sin(angle) * circleRadius
         );
 
-        Vector2 direction = (targetPos - (Vector2)transform.position).normalized;
+        Vector3 direction = PhysicsHelper.DirectionXZ(transform.position, targetPos);
         rb.linearVelocity = direction * moveSpeed;
     }
 
     private void MoveBackAndForth()
     {
         float x = centerPoint.x + Mathf.Sin(Time.time * moveSpeed * 0.5f) * circleRadius;
-        Vector2 targetPos = new Vector2(x, centerPoint.y);
+        Vector3 targetPos = new Vector3(x, 0f, centerPoint.z);
 
-        Vector2 direction = (targetPos - (Vector2)transform.position).normalized;
+        Vector3 direction = PhysicsHelper.DirectionXZ(transform.position, targetPos);
         rb.linearVelocity = direction * moveSpeed;
     }
 
@@ -274,22 +260,22 @@ public class OpponentController : MonoBehaviour
     {
         angle += Time.deltaTime * (moveSpeed / circleRadius);
 
-        Vector2 targetPos = centerPoint + new Vector2(
+        // Figure-8 on XZ plane
+        Vector3 targetPos = centerPoint + new Vector3(
             Mathf.Sin(angle) * circleRadius,
+            0f,
             Mathf.Sin(angle * 2) * circleRadius * 0.5f
         );
 
-        Vector2 direction = (targetPos - (Vector2)transform.position).normalized;
+        Vector3 direction = PhysicsHelper.DirectionXZ(transform.position, targetPos);
         rb.linearVelocity = direction * moveSpeed;
     }
 
     private void OnDrawGizmosSelected()
     {
-        // Draw possession radius
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, possessionRadius);
 
-        // Draw movement path
         Gizmos.color = Color.yellow;
 
         switch (pattern)
@@ -300,23 +286,24 @@ public class OpponentController : MonoBehaviour
 
             case MovementPattern.BackAndForth:
                 Gizmos.DrawLine(
-                    centerPoint - new Vector2(circleRadius, 0),
-                    centerPoint + new Vector2(circleRadius, 0)
+                    centerPoint - new Vector3(circleRadius, 0, 0),
+                    centerPoint + new Vector3(circleRadius, 0, 0)
                 );
                 break;
         }
     }
 
-    private void DrawCircle(Vector2 center, float radius, int segments)
+    private void DrawCircle(Vector3 center, float radius, int segments)
     {
         float angleStep = 360f / segments;
-        Vector2 prevPoint = center + new Vector2(radius, 0);
+        Vector3 prevPoint = center + new Vector3(radius, 0, 0);
 
         for (int i = 1; i <= segments; i++)
         {
             float rad = Mathf.Deg2Rad * angleStep * i;
-            Vector2 newPoint = center + new Vector2(
+            Vector3 newPoint = center + new Vector3(
                 Mathf.Cos(rad) * radius,
+                0f,
                 Mathf.Sin(rad) * radius
             );
 

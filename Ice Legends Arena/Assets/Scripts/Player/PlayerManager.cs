@@ -4,10 +4,15 @@ using System.Collections.Generic;
 /// <summary>
 /// Manages the team of 5 players and handles switching between them.
 /// Singleton pattern for global access.
+/// 3D: distance checks use XZ plane, "last defender" checks X position (rink length).
 /// </summary>
 public class PlayerManager : MonoBehaviour
 {
     public static PlayerManager Instance { get; private set; }
+
+    // Event fired when player switches
+    public delegate void PlayerSwitchedDelegate(GameObject newPlayer, GameObject oldPlayer);
+    public event PlayerSwitchedDelegate OnPlayerSwitched;
 
     [Header("Team Setup")]
     [Tooltip("All 5 players on your team (assign in Inspector)")]
@@ -25,12 +30,16 @@ public class PlayerManager : MonoBehaviour
     [Range(0.1f, 1f)]
     [SerializeField] private float switchCooldown = 0.2f;
 
+    [Header("Team Orientation")]
+    [Tooltip("X position of own goal (negative = left side). Used to determine 'last defender'.")]
+    [SerializeField] private float ownGoalX = -25f;
+
     // State
-    private int currentPlayerIndex = 0; // Index of currently controlled player
-    private GameObject currentControlIndicator; // Visual indicator instance
+    private int currentPlayerIndex = 0;
+    private GameObject currentControlIndicator;
     private float lastSwitchTime = -999f;
     private Transform puckTransform;
-    private Dictionary<GameObject, Color> originalPlayerColors = new Dictionary<GameObject, Color>(); // Store original colors
+    private Dictionary<GameObject, Color> originalPlayerColors = new Dictionary<GameObject, Color>();
 
     // Public properties
     public GameObject CurrentPlayer => (teamPlayers.Count > 0 && currentPlayerIndex < teamPlayers.Count)
@@ -39,7 +48,6 @@ public class PlayerManager : MonoBehaviour
 
     private void Awake()
     {
-        // Singleton pattern
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -51,35 +59,27 @@ public class PlayerManager : MonoBehaviour
 
     private void Start()
     {
-        // Find puck
         UpdatePuckReference();
 
-        // Validate team setup
         if (teamPlayers.Count == 0)
         {
             Debug.LogWarning("PlayerManager: No team players assigned! Searching for players with 'Player' tag...");
             AutoDetectPlayers();
         }
 
-        // Initialize all players (disable control on all of them first)
         InitializeAllPlayers();
 
-        // Set initial controlled player (enable control on player 0)
         if (teamPlayers.Count > 0)
         {
             SwitchToPlayer(0);
         }
 
-        // Subscribe to SWITCH button events
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnSwitchRequested += HandleSwitchRequested;
         }
     }
 
-    /// <summary>
-    /// Update puck reference (in case it becomes null or stale)
-    /// </summary>
     private void UpdatePuckReference()
     {
         if (puckTransform == null)
@@ -92,32 +92,25 @@ public class PlayerManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Initialize all players - disable player control, enable AI, store original colors
-    /// </summary>
     private void InitializeAllPlayers()
     {
         foreach (GameObject player in teamPlayers)
         {
             if (player == null) continue;
 
-            // Store original color
+            // Store original color (for SpriteRenderer fallback if still using sprites)
             SpriteRenderer spriteRenderer = player.GetComponent<SpriteRenderer>();
             if (spriteRenderer != null && !originalPlayerColors.ContainsKey(player))
             {
                 originalPlayerColors[player] = spriteRenderer.color;
             }
 
-            // Disable all player control scripts
             DisablePlayerControl(player);
         }
 
         Debug.Log($"PlayerManager: Initialized {teamPlayers.Count} players (all set to AI mode)");
     }
 
-    /// <summary>
-    /// Auto-detect players with "Player" tag and add to team
-    /// </summary>
     private void AutoDetectPlayers()
     {
         GameObject[] foundPlayers = GameObject.FindGameObjectsWithTag("Player");
@@ -131,12 +124,8 @@ public class PlayerManager : MonoBehaviour
         Debug.Log($"PlayerManager: Auto-detected {teamPlayers.Count} players");
     }
 
-    /// <summary>
-    /// Handle SWITCH button request from ContextButtonManager
-    /// </summary>
     private void HandleSwitchRequested(bool isHeld)
     {
-        // Check cooldown
         if (Time.time - lastSwitchTime < switchCooldown)
         {
             return;
@@ -144,24 +133,18 @@ public class PlayerManager : MonoBehaviour
 
         if (isHeld)
         {
-            // Hold = switch to last defender (furthest back player)
             SwitchToLastDefender();
         }
         else
         {
-            // Tap = switch to player nearest puck
             SwitchToNearestToPuck();
         }
 
         lastSwitchTime = Time.time;
     }
 
-    /// <summary>
-    /// Switch to player nearest the puck
-    /// </summary>
     private void SwitchToNearestToPuck()
     {
-        // Ensure we have a valid puck reference
         UpdatePuckReference();
 
         if (puckTransform == null)
@@ -179,14 +162,12 @@ public class PlayerManager : MonoBehaviour
         int nearestIndex = 0;
         float nearestDistance = float.MaxValue;
 
-        // Find player nearest to puck
         for (int i = 0; i < teamPlayers.Count; i++)
         {
             if (teamPlayers[i] == null) continue;
 
-            float distance = Vector2.Distance(teamPlayers[i].transform.position, puckTransform.position);
+            float distance = PhysicsHelper.DistanceXZ(teamPlayers[i].transform.position, puckTransform.position);
 
-            // Debug: Show distance for each player
             Debug.Log($"  Player {i + 1} distance to puck: {distance:F2}");
 
             if (distance < nearestDistance)
@@ -196,40 +177,38 @@ public class PlayerManager : MonoBehaviour
             }
         }
 
-        Debug.Log($"→ Switching to Player {nearestIndex + 1} (nearest to puck at {nearestDistance:F2} units)");
+        Debug.Log($"-> Switching to Player {nearestIndex + 1} (nearest to puck at {nearestDistance:F2} units)");
         SwitchToPlayer(nearestIndex);
     }
 
     /// <summary>
-    /// Switch to last defender (furthest back player)
-    /// Assumes "back" means lowest Y position (defending bottom goal)
+    /// Switch to last defender (closest to own goal along X axis).
+    /// In 3D: X = rink length, own goal is at ownGoalX.
     /// </summary>
     private void SwitchToLastDefender()
     {
         if (teamPlayers.Count == 0) return;
 
         int lastDefenderIndex = 0;
-        float lowestY = float.MaxValue;
+        float closestToOwnGoal = float.MaxValue;
 
         for (int i = 0; i < teamPlayers.Count; i++)
         {
             if (teamPlayers[i] == null) continue;
 
-            float yPosition = teamPlayers[i].transform.position.y;
-            if (yPosition < lowestY)
+            // Distance from own goal along X axis (rink length)
+            float distFromOwnGoal = Mathf.Abs(teamPlayers[i].transform.position.x - ownGoalX);
+            if (distFromOwnGoal < closestToOwnGoal)
             {
-                lowestY = yPosition;
+                closestToOwnGoal = distFromOwnGoal;
                 lastDefenderIndex = i;
             }
         }
 
         SwitchToPlayer(lastDefenderIndex);
-        Debug.Log($"Switched to last defender: Player {lastDefenderIndex + 1} (Y: {lowestY:F2})");
+        Debug.Log($"Switched to last defender: Player {lastDefenderIndex + 1} (X: {teamPlayers[lastDefenderIndex].transform.position.x:F2})");
     }
 
-    /// <summary>
-    /// Cycle to next player clockwise
-    /// </summary>
     public void CycleToNextPlayer()
     {
         if (teamPlayers.Count == 0) return;
@@ -239,14 +218,10 @@ public class PlayerManager : MonoBehaviour
         Debug.Log($"Cycled to next player: Player {nextIndex + 1}");
     }
 
-    /// <summary>
-    /// Switch to a specific player by GameObject reference (for auto-switch on pass reception)
-    /// </summary>
     public void SwitchToPlayerByGameObject(GameObject targetPlayer)
     {
         if (targetPlayer == null) return;
 
-        // Find the index of this player in teamPlayers list
         int playerIndex = teamPlayers.IndexOf(targetPlayer);
 
         if (playerIndex >= 0)
@@ -260,49 +235,34 @@ public class PlayerManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Switch control to a specific player by index
-    /// </summary>
     private void SwitchToPlayer(int playerIndex)
     {
         if (playerIndex < 0 || playerIndex >= teamPlayers.Count) return;
         if (teamPlayers[playerIndex] == null) return;
 
-        // Store reference to old player before switching
         GameObject oldPlayer = CurrentPlayer;
 
-        // Disable control on old player
         if (oldPlayer != null)
         {
             DisablePlayerControl(oldPlayer);
-            RestorePlayerColor(oldPlayer); // Restore original color
+            RestorePlayerColor(oldPlayer);
         }
 
-        // Update current player
         currentPlayerIndex = playerIndex;
 
-        // Enable control on new player
         EnablePlayerControl(CurrentPlayer);
-
-        // Update visual indicator (this will change color to controlled color)
         UpdateControlIndicator();
+
+        OnPlayerSwitched?.Invoke(CurrentPlayer, oldPlayer);
     }
 
-    /// <summary>
-    /// Enable player control (disable AI, enable input)
-    /// </summary>
     private void EnablePlayerControl(GameObject player)
     {
         if (player == null) return;
 
-        // Enable PlayerController
         PlayerController playerController = player.GetComponent<PlayerController>();
-        if (playerController != null)
-        {
-            playerController.enabled = true;
-        }
+        if (playerController != null) playerController.enabled = true;
 
-        // Enable all player component scripts (shooting, passing, checking)
         ShootingController shootingController = player.GetComponent<ShootingController>();
         if (shootingController != null) shootingController.enabled = true;
 
@@ -312,31 +272,19 @@ public class PlayerManager : MonoBehaviour
         CheckingController checkingController = player.GetComponent<CheckingController>();
         if (checkingController != null) checkingController.enabled = true;
 
-        // Disable AI (if it exists)
         TeammateController aiController = player.GetComponent<TeammateController>();
-        if (aiController != null)
-        {
-            aiController.enabled = false;
-        }
+        if (aiController != null) aiController.enabled = false;
 
         Debug.Log($"Enabled control for {player.name}");
     }
 
-    /// <summary>
-    /// Disable player control (enable AI, disable input)
-    /// </summary>
     private void DisablePlayerControl(GameObject player)
     {
         if (player == null) return;
 
-        // Disable PlayerController
         PlayerController playerController = player.GetComponent<PlayerController>();
-        if (playerController != null)
-        {
-            playerController.enabled = false;
-        }
+        if (playerController != null) playerController.enabled = false;
 
-        // Disable all player component scripts
         ShootingController shootingController = player.GetComponent<ShootingController>();
         if (shootingController != null) shootingController.enabled = false;
 
@@ -346,12 +294,11 @@ public class PlayerManager : MonoBehaviour
         CheckingController checkingController = player.GetComponent<CheckingController>();
         if (checkingController != null) checkingController.enabled = false;
 
-        // Enable AI (if it exists)
         TeammateController aiController = player.GetComponent<TeammateController>();
         if (aiController != null)
         {
             aiController.enabled = true;
-            aiController.isAI = true; // Ensure AI mode is on
+            aiController.isAI = true;
             Debug.Log($"Enabled AI for {player.name} (isAI={aiController.isAI}, enabled={aiController.enabled})");
         }
         else
@@ -362,26 +309,20 @@ public class PlayerManager : MonoBehaviour
         Debug.Log($"Disabled control for {player.name}");
     }
 
-    /// <summary>
-    /// Update visual indicator to show controlled player
-    /// </summary>
     private void UpdateControlIndicator()
     {
         if (CurrentPlayer == null) return;
 
-        // Destroy old indicator
         if (currentControlIndicator != null)
         {
             Destroy(currentControlIndicator);
         }
 
-        // Create new indicator if prefab exists
         if (controlIndicatorPrefab != null)
         {
             currentControlIndicator = Instantiate(controlIndicatorPrefab, CurrentPlayer.transform);
             currentControlIndicator.transform.localPosition = Vector3.zero;
 
-            // Set indicator color
             SpriteRenderer indicatorSprite = currentControlIndicator.GetComponent<SpriteRenderer>();
             if (indicatorSprite != null)
             {
@@ -390,7 +331,6 @@ public class PlayerManager : MonoBehaviour
         }
         else
         {
-            // Fallback: tint player sprite
             SpriteRenderer playerSprite = CurrentPlayer.GetComponent<SpriteRenderer>();
             if (playerSprite != null)
             {
@@ -399,14 +339,10 @@ public class PlayerManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Restore player's original color
-    /// </summary>
     private void RestorePlayerColor(GameObject player)
     {
         if (player == null) return;
 
-        // Only restore color if using sprite tint fallback (no indicator prefab)
         if (controlIndicatorPrefab == null)
         {
             SpriteRenderer playerSprite = player.GetComponent<SpriteRenderer>();
@@ -420,7 +356,6 @@ public class PlayerManager : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Unsubscribe from events
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnSwitchRequested -= HandleSwitchRequested;
@@ -432,23 +367,17 @@ public class PlayerManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Debug visualization
-    /// </summary>
     private void OnDrawGizmosSelected()
     {
         if (teamPlayers == null || teamPlayers.Count == 0) return;
 
-        // Draw connections between team players
         Gizmos.color = Color.cyan;
         for (int i = 0; i < teamPlayers.Count; i++)
         {
             if (teamPlayers[i] == null) continue;
 
-            // Draw sphere at player position
             Gizmos.DrawWireSphere(teamPlayers[i].transform.position, 0.5f);
 
-            // Draw line to next player (cycle)
             int nextIndex = (i + 1) % teamPlayers.Count;
             if (teamPlayers[nextIndex] != null)
             {
@@ -456,7 +385,6 @@ public class PlayerManager : MonoBehaviour
             }
         }
 
-        // Highlight current player
         if (Application.isPlaying && CurrentPlayer != null)
         {
             Gizmos.color = Color.green;

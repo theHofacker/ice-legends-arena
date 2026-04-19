@@ -2,8 +2,9 @@ using UnityEngine;
 
 /// <summary>
 /// Handles puck possession mechanics - makes puck "stick" to player when in possession.
+/// 3D physics: movement on XZ plane, Y = height above ice (for saucer passes, roof shots).
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody))]
 public class PuckController : MonoBehaviour
 {
     [Header("Possession Settings")]
@@ -12,7 +13,7 @@ public class PuckController : MonoBehaviour
     [SerializeField] private float possessionRadius = 1.5f;
 
     [Tooltip("Offset position from player when possessed (stick position)")]
-    [SerializeField] private Vector2 possessionOffset = new Vector2(0.5f, 0f);
+    [SerializeField] private Vector3 possessionOffset = new Vector3(0.5f, 0f, 0f);
 
     [Tooltip("How smoothly puck follows player")]
     [Range(1f, 50f)]
@@ -24,31 +25,22 @@ public class PuckController : MonoBehaviour
     [SerializeField] private float releaseThreshold = 10f;
 
     // Component references
-    private Rigidbody2D rb;
+    private Rigidbody rb;
     private Transform playerTransform;
-    private Collider2D puckCollider;
-    private Collider2D playerCollider;
-    private SpriteRenderer puckRenderer;
+    private Collider puckCollider;
+    private Collider playerCollider;
 
     // State
     private bool isPossessed = false;
-    private Vector2 lastPlayerDirection = Vector2.right;
-    private int originalSortingOrder;
+    private Vector3 lastPlayerDirection = Vector3.right;
     private float timeSinceRelease = 0f;
     private bool collisionDisabledAfterShot = false;
-    private bool wasOpponentPossessionLastFrame = false; // Track state changes for logging
+    private bool wasOpponentPossessionLastFrame = false;
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
-        puckCollider = GetComponent<Collider2D>();
-        puckRenderer = GetComponent<SpriteRenderer>();
-
-        // Store original sorting order
-        if (puckRenderer != null)
-        {
-            originalSortingOrder = puckRenderer.sortingOrder;
-        }
+        rb = GetComponent<Rigidbody>();
+        puckCollider = GetComponent<Collider>();
     }
 
     private void Start()
@@ -86,17 +78,17 @@ public class PuckController : MonoBehaviour
                 // Re-enable collision with old player (if exists)
                 if (puckCollider != null && playerCollider != null && isPossessed)
                 {
-                    Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
+                    Physics.IgnoreCollision(puckCollider, playerCollider, false);
                 }
 
                 // Switch to new player
                 playerTransform = currentPlayer.transform;
-                playerCollider = currentPlayer.GetComponent<Collider2D>();
+                playerCollider = currentPlayer.GetComponent<Collider>();
 
                 // Re-disable collision if currently possessed
                 if (puckCollider != null && playerCollider != null && isPossessed)
                 {
-                    Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
+                    Physics.IgnoreCollision(puckCollider, playerCollider, true);
                 }
 
                 Debug.Log($"PuckController now tracking: {currentPlayer.name}");
@@ -109,7 +101,7 @@ public class PuckController : MonoBehaviour
             if (player != null)
             {
                 playerTransform = player.transform;
-                playerCollider = player.GetComponent<Collider2D>();
+                playerCollider = player.GetComponent<Collider>();
             }
         }
     }
@@ -125,21 +117,19 @@ public class PuckController : MonoBehaviour
 
     private void CheckPossession()
     {
-        float distance = Vector2.Distance(transform.position, playerTransform.position);
+        float distance = PhysicsHelper.DistanceXZ(transform.position, playerTransform.position);
 
         // Check if an OPPONENT has clearer possession than the controlled player
-        // KEY CHANGE: Teammates share possession freely - only OPPONENTS block possession
         bool opponentHasPuck = false;
 
         // Only check if puck is slow enough to be possessed
-        if (rb.linearVelocity.magnitude < 2f)
+        if (PhysicsHelper.SpeedXZ(rb.linearVelocity) < 2f)
         {
             // Check OpponentController (old simple AI)
             OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
             foreach (OpponentController opponent in opponents)
             {
-                float distanceToOpponent = Vector2.Distance(transform.position, opponent.transform.position);
-                // Only prevent if opponent is CLOSER than controlled player AND very close
+                float distanceToOpponent = PhysicsHelper.DistanceXZ(transform.position, opponent.transform.position);
                 if (distanceToOpponent < distance && distanceToOpponent <= possessionRadius * 0.75f)
                 {
                     opponentHasPuck = true;
@@ -153,8 +143,7 @@ public class PuckController : MonoBehaviour
                 AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
                 foreach (AIController ai in aiOpponents)
                 {
-                    float distanceToAI = Vector2.Distance(transform.position, ai.transform.position);
-                    // Only prevent if AI is CLOSER than controlled player AND very close
+                    float distanceToAI = PhysicsHelper.DistanceXZ(transform.position, ai.transform.position);
                     if (distanceToAI < distance && distanceToAI <= possessionRadius * 0.75f)
                     {
                         opponentHasPuck = true;
@@ -162,13 +151,9 @@ public class PuckController : MonoBehaviour
                     }
                 }
             }
-
-            // REMOVED: Teammate blocking check
-            // Teammates can freely share possession with controlled player
-            // This allows pass reception to work smoothly
         }
 
-        // Only log when state CHANGES (not every frame)
+        // Only log when state CHANGES
         if (opponentHasPuck && !wasOpponentPossessionLastFrame)
         {
             Debug.Log($"Opponent has puck - preventing steal (they're closer)");
@@ -176,59 +161,41 @@ public class PuckController : MonoBehaviour
         wasOpponentPossessionLastFrame = opponentHasPuck;
 
         // Auto-possess when close and puck is moving slowly (and opponent doesn't have it)
-        bool canPossess = !isPossessed && distance <= possessionRadius && rb.linearVelocity.magnitude < releaseThreshold && !opponentHasPuck;
+        bool canPossess = !isPossessed && distance <= possessionRadius &&
+                          PhysicsHelper.SpeedXZ(rb.linearVelocity) < releaseThreshold && !opponentHasPuck;
 
         if (canPossess)
         {
             isPossessed = true;
-            rb.linearVelocity = Vector2.zero; // Stop puck movement
+            rb.linearVelocity = Vector3.zero;
             Debug.Log($"Player auto-possessed puck (distance: {distance:F2}, velocity: {rb.linearVelocity.magnitude:F2}, opponentNearby: {opponentHasPuck})");
 
             // Disable collision between puck and player
             if (puckCollider != null && playerCollider != null)
             {
-                Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
-            }
-
-            // Render puck above player when possessed
-            if (puckRenderer != null)
-            {
-                puckRenderer.sortingOrder = 15; // Above player (player is at 10)
+                Physics.IgnoreCollision(puckCollider, playerCollider, true);
             }
         }
 
         // Release when puck moves fast (from shooting)
-        if (isPossessed && rb.linearVelocity.magnitude > releaseThreshold)
+        if (isPossessed && PhysicsHelper.SpeedXZ(rb.linearVelocity) > releaseThreshold)
         {
             isPossessed = false;
             collisionDisabledAfterShot = true;
             timeSinceRelease = 0f;
-
-            // DON'T re-enable collision immediately - wait for puck to get away from player
-            // Collision will be re-enabled after delay (see below)
-
-            // Restore original sorting order
-            if (puckRenderer != null)
-            {
-                puckRenderer.sortingOrder = originalSortingOrder;
-            }
         }
 
-        // Re-enable collision after short delay (prevents puck from hitting player after shot)
+        // Re-enable collision after short delay
         if (collisionDisabledAfterShot)
         {
             timeSinceRelease += Time.deltaTime;
 
-            // Re-enable after 0.2 seconds OR when puck is far enough away from ANY entity
             bool farEnoughAway = IsPuckFarFromAllEntities(2f);
 
             if (timeSinceRelease > 0.2f || farEnoughAway)
             {
                 collisionDisabledAfterShot = false;
-
-                // Re-enable collision with ALL entities (not just current player!)
                 ReEnableCollisionWithAllEntities();
-
                 Debug.Log("Puck collision re-enabled with all entities");
             }
         }
@@ -237,11 +204,15 @@ public class PuckController : MonoBehaviour
     private void FollowPlayer()
     {
         // Calculate target position (player + offset in facing direction)
-        Vector2 offsetDirection = lastPlayerDirection.magnitude > 0.1f ? lastPlayerDirection : Vector2.right;
-        Vector2 targetPosition = (Vector2)playerTransform.position + offsetDirection * possessionOffset.x;
+        Vector3 offsetDirection = lastPlayerDirection.magnitude > 0.1f ? lastPlayerDirection : Vector3.right;
+        offsetDirection = PhysicsHelper.FlattenY(offsetDirection).normalized;
+
+        // Offset along facing direction on the XZ plane, keep puck on ice (Y=0)
+        Vector3 targetPosition = playerTransform.position + offsetDirection * possessionOffset.x;
+        targetPosition.y = transform.position.y; // Keep puck at current height (ice level)
 
         // Smoothly move puck to target position
-        Vector2 newPosition = Vector2.Lerp(
+        Vector3 newPosition = Vector3.Lerp(
             rb.position,
             targetPosition,
             followSpeed * Time.fixedDeltaTime
@@ -250,9 +221,9 @@ public class PuckController : MonoBehaviour
         rb.MovePosition(newPosition);
 
         // Keep velocity at zero while possessed (except when shot is applied)
-        if (rb.linearVelocity.magnitude < releaseThreshold)
+        if (PhysicsHelper.SpeedXZ(rb.linearVelocity) < releaseThreshold)
         {
-            rb.linearVelocity = Vector2.zero;
+            rb.linearVelocity = Vector3.zero;
         }
     }
 
@@ -264,13 +235,13 @@ public class PuckController : MonoBehaviour
             Vector2 moveInput = InputManager.Instance.MoveInput;
             if (moveInput.magnitude > 0.1f)
             {
-                lastPlayerDirection = moveInput.normalized;
+                lastPlayerDirection = PhysicsHelper.InputToWorld(moveInput).normalized;
             }
         }
     }
 
     /// <summary>
-    /// Check if puck is far enough away from all entities (players, teammates, opponents)
+    /// Check if puck is far enough away from all entities
     /// </summary>
     private bool IsPuckFarFromAllEntities(float minDistance)
     {
@@ -278,52 +249,39 @@ public class PuckController : MonoBehaviour
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
         foreach (GameObject player in players)
         {
-            float distance = Vector2.Distance(transform.position, player.transform.position);
-            if (distance < minDistance)
-            {
-                return false; // Too close to a player
-            }
+            if (PhysicsHelper.DistanceXZ(transform.position, player.transform.position) < minDistance)
+                return false;
         }
 
         // Check all teammates
         TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
         foreach (TeammateController teammate in teammates)
         {
-            float distance = Vector2.Distance(transform.position, teammate.transform.position);
-            if (distance < minDistance)
-            {
-                return false; // Too close to a teammate
-            }
+            if (PhysicsHelper.DistanceXZ(transform.position, teammate.transform.position) < minDistance)
+                return false;
         }
 
         // Check all AI opponents
         AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         foreach (AIController ai in aiOpponents)
         {
-            float distance = Vector2.Distance(transform.position, ai.transform.position);
-            if (distance < minDistance)
-            {
-                return false; // Too close to an opponent
-            }
+            if (PhysicsHelper.DistanceXZ(transform.position, ai.transform.position) < minDistance)
+                return false;
         }
 
         // Check legacy opponents
         OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
         foreach (OpponentController opponent in opponents)
         {
-            float distance = Vector2.Distance(transform.position, opponent.transform.position);
-            if (distance < minDistance)
-            {
-                return false; // Too close to an opponent
-            }
+            if (PhysicsHelper.DistanceXZ(transform.position, opponent.transform.position) < minDistance)
+                return false;
         }
 
-        return true; // Far enough from everyone
+        return true;
     }
 
     /// <summary>
-    /// Re-enable collision with all entities (players, teammates, opponents)
-    /// Fixes bug where puck becomes untouchable after passing
+    /// Re-enable collision with all entities
     /// </summary>
     private void ReEnableCollisionWithAllEntities()
     {
@@ -333,44 +291,36 @@ public class PuckController : MonoBehaviour
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
         foreach (GameObject player in players)
         {
-            Collider2D playerCol = player.GetComponent<Collider2D>();
+            Collider playerCol = player.GetComponent<Collider>();
             if (playerCol != null)
-            {
-                Physics2D.IgnoreCollision(puckCollider, playerCol, false);
-            }
+                Physics.IgnoreCollision(puckCollider, playerCol, false);
         }
 
         // Re-enable collision with all teammates
         TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
         foreach (TeammateController teammate in teammates)
         {
-            Collider2D teammateCol = teammate.GetComponent<Collider2D>();
+            Collider teammateCol = teammate.GetComponent<Collider>();
             if (teammateCol != null)
-            {
-                Physics2D.IgnoreCollision(puckCollider, teammateCol, false);
-            }
+                Physics.IgnoreCollision(puckCollider, teammateCol, false);
         }
 
         // Re-enable collision with all AI opponents
         AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         foreach (AIController ai in aiOpponents)
         {
-            Collider2D aiCol = ai.GetComponent<Collider2D>();
+            Collider aiCol = ai.GetComponent<Collider>();
             if (aiCol != null)
-            {
-                Physics2D.IgnoreCollision(puckCollider, aiCol, false);
-            }
+                Physics.IgnoreCollision(puckCollider, aiCol, false);
         }
 
         // Re-enable collision with legacy opponents
         OpponentController[] opponents = FindObjectsByType<OpponentController>(FindObjectsSortMode.None);
         foreach (OpponentController opponent in opponents)
         {
-            Collider2D opponentCol = opponent.GetComponent<Collider2D>();
+            Collider opponentCol = opponent.GetComponent<Collider>();
             if (opponentCol != null)
-            {
-                Physics2D.IgnoreCollision(puckCollider, opponentCol, false);
-            }
+                Physics.IgnoreCollision(puckCollider, opponentCol, false);
         }
     }
 
@@ -392,13 +342,7 @@ public class PuckController : MonoBehaviour
         // Re-enable collision
         if (puckCollider != null && playerCollider != null)
         {
-            Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
-        }
-
-        // Restore original sorting order
-        if (puckRenderer != null)
-        {
-            puckRenderer.sortingOrder = originalSortingOrder;
+            Physics.IgnoreCollision(puckCollider, playerCollider, false);
         }
     }
 
@@ -409,21 +353,15 @@ public class PuckController : MonoBehaviour
     {
         playerTransform = owner;
         isPossessed = true;
-        rb.linearVelocity = Vector2.zero;
+        rb.linearVelocity = Vector3.zero;
 
         // Update player collider reference
-        playerCollider = owner.GetComponent<Collider2D>();
+        playerCollider = owner.GetComponent<Collider>();
 
         // Disable collision
         if (puckCollider != null && playerCollider != null)
         {
-            Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
-        }
-
-        // Render puck above player
-        if (puckRenderer != null)
-        {
-            puckRenderer.sortingOrder = 15;
+            Physics.IgnoreCollision(puckCollider, playerCollider, true);
         }
     }
 
@@ -435,18 +373,12 @@ public class PuckController : MonoBehaviour
         if (playerTransform == null) return;
 
         isPossessed = true;
-        rb.linearVelocity = Vector2.zero; // Stop puck completely
+        rb.linearVelocity = Vector3.zero;
 
         // Disable collision
         if (puckCollider != null && playerCollider != null)
         {
-            Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
-        }
-
-        // Render puck above player
-        if (puckRenderer != null)
-        {
-            puckRenderer.sortingOrder = 15;
+            Physics.IgnoreCollision(puckCollider, playerCollider, true);
         }
 
         Debug.Log($"Forced immediate possession for {playerTransform.name}");
@@ -462,7 +394,7 @@ public class PuckController : MonoBehaviour
         if (isPossessed && playerTransform != null)
         {
             Gizmos.color = Color.cyan;
-            Vector2 offsetPos = (Vector2)playerTransform.position + lastPlayerDirection * possessionOffset.x;
+            Vector3 offsetPos = playerTransform.position + PhysicsHelper.FlattenY(lastPlayerDirection).normalized * possessionOffset.x;
             Gizmos.DrawLine(transform.position, offsetPos);
         }
     }

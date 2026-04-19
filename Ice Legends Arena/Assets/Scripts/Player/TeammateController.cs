@@ -4,8 +4,8 @@ using UnityEngine;
 /// Simple teammate AI for testing passing mechanics.
 /// Stays in position and can receive passes.
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
-[RequireComponent(typeof(CircleCollider2D))]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(CapsuleCollider))]
 public class TeammateController : MonoBehaviour
 {
     [Header("Teammate Settings")]
@@ -16,7 +16,7 @@ public class TeammateController : MonoBehaviour
     public FormationManager.PlayerRole playerRole = FormationManager.PlayerRole.Center;
 
     [Tooltip("Home position for this teammate (fallback if no FormationManager)")]
-    public Vector2 homePosition = Vector2.zero;
+    public Vector3 homePosition = Vector3.zero;
 
     [Header("AI Movement Settings")]
     [Tooltip("Speed when AI is moving")]
@@ -45,10 +45,10 @@ public class TeammateController : MonoBehaviour
     public float oneTimerBasePower = 25f;
 
     // Component references
-    private Rigidbody2D rb;
+    private Rigidbody rb;
     private SpriteRenderer spriteRenderer;
     private Transform puckTransform;
-    private Rigidbody2D puckRb;
+    private Rigidbody puckRb;
     private Transform nearestGoal;
 
     // State
@@ -59,13 +59,13 @@ public class TeammateController : MonoBehaviour
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
+        rb = GetComponent<Rigidbody>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
         // Set up physics for teammate (Dynamic so AI can move them)
-        rb.bodyType = RigidbodyType2D.Dynamic;
-        rb.gravityScale = 0;
-        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+        rb.isKinematic = false;
+        rb.useGravity = false;
+        rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
         rb.linearDamping = 2f; // Some drag for realistic movement
     }
 
@@ -79,7 +79,7 @@ public class TeammateController : MonoBehaviour
         if (puck != null)
         {
             puckTransform = puck.transform;
-            puckRb = puck.GetComponent<Rigidbody2D>();
+            puckRb = puck.GetComponent<Rigidbody>();
         }
 
         // Find nearest goal (for one-timers)
@@ -91,7 +91,7 @@ public class TeammateController : MonoBehaviour
         }
 
         // Set home position
-        if (homePosition == Vector2.zero)
+        if (homePosition == Vector3.zero)
         {
             homePosition = transform.position;
         }
@@ -146,9 +146,9 @@ public class TeammateController : MonoBehaviour
     private void FormationBasedMovement()
     {
         // Get target formation position from FormationManager
-        Vector2 formationPosition = FormationManager.Instance.GetFormationPosition(playerRole);
-        float distanceToFormation = Vector2.Distance(transform.position, formationPosition);
-        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
+        Vector3 formationPosition = PhysicsHelper.ToWorldPosition(FormationManager.Instance.GetFormationPosition(playerRole));
+        float distanceToFormation = PhysicsHelper.DistanceXZ(transform.position, formationPosition);
+        float distanceToPuck = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
         // Check if teammate has possession
         bool teammateHasPuck = IsTeammateControllingPuck();
@@ -164,7 +164,7 @@ public class TeammateController : MonoBehaviour
             // I'm designated to pressure - chase the puck (only if I'm nearest)
             if (IsSignificantlyNearestTeammate())
             {
-                Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
+                Vector3 directionToPuck = PhysicsHelper.DirectionXZ(transform.position, puckTransform.position);
                 rb.linearVelocity = directionToPuck * aiMoveSpeed;
                 return;
             }
@@ -173,13 +173,13 @@ public class TeammateController : MonoBehaviour
         // Default: Move to formation position
         if (distanceToFormation > formationPositionRadius)
         {
-            Vector2 directionToFormation = (formationPosition - (Vector2)transform.position).normalized;
+            Vector3 directionToFormation = PhysicsHelper.DirectionXZ(transform.position, formationPosition);
             rb.linearVelocity = directionToFormation * aiMoveSpeed;
         }
         else
         {
             // At formation position - slow down and hold
-            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
+            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, 5f * Time.deltaTime);
         }
     }
 
@@ -188,8 +188,8 @@ public class TeammateController : MonoBehaviour
     /// </summary>
     private void LegacyMovementBehavior()
     {
-        float distanceToPuck = Vector2.Distance(transform.position, puckTransform.position);
-        float distanceToHome = Vector2.Distance(transform.position, homePosition);
+        float distanceToPuck = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
+        float distanceToHome = PhysicsHelper.DistanceXZ(transform.position, homePosition);
 
         // Check if any teammate has possession
         bool teammateHasPuck = IsTeammateControllingPuck();
@@ -197,18 +197,18 @@ public class TeammateController : MonoBehaviour
         // Chase puck if no teammate has it and we're nearest
         if (distanceToPuck < chaseRadius && !teammateHasPuck && IsSignificantlyNearestTeammate())
         {
-            Vector2 directionToPuck = (puckTransform.position - transform.position).normalized;
+            Vector3 directionToPuck = PhysicsHelper.DirectionXZ(transform.position, puckTransform.position);
             rb.linearVelocity = directionToPuck * aiMoveSpeed;
         }
         // Otherwise return to home position
         else if (distanceToHome > formationPositionRadius)
         {
-            Vector2 directionToHome = (homePosition - (Vector2)transform.position).normalized;
+            Vector3 directionToHome = PhysicsHelper.DirectionXZ(transform.position, homePosition);
             rb.linearVelocity = directionToHome * aiMoveSpeed;
         }
         else
         {
-            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, Vector2.zero, 5f * Time.deltaTime);
+            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, 5f * Time.deltaTime);
         }
     }
 
@@ -230,7 +230,7 @@ public class TeammateController : MonoBehaviour
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
         foreach (GameObject player in players)
         {
-            float distanceToPuck = Vector2.Distance(player.transform.position, puckTransform.position);
+            float distanceToPuck = PhysicsHelper.DistanceXZ(player.transform.position, puckTransform.position);
 
             // If any player is close to puck, consider it controlled
             // Increased radius from 1.5x to 3x to account for fast skating
@@ -252,14 +252,14 @@ public class TeammateController : MonoBehaviour
         if (puckTransform == null) return false;
 
         TeammateController[] allTeammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
-        float myDistance = Vector2.Distance(transform.position, puckTransform.position);
+        float myDistance = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
         foreach (TeammateController teammate in allTeammates)
         {
             if (teammate == this) continue; // Skip self
             if (!teammate.isAI || !teammate.enabled) continue; // Skip non-AI or disabled teammates
 
-            float theirDistance = Vector2.Distance(teammate.transform.position, puckTransform.position);
+            float theirDistance = PhysicsHelper.DistanceXZ(teammate.transform.position, puckTransform.position);
 
             // If ANYONE else is closer, I shouldn't chase
             if (theirDistance < myDistance)
@@ -273,12 +273,12 @@ public class TeammateController : MonoBehaviour
 
     private void CheckPuckReception()
     {
-        float distance = Vector2.Distance(transform.position, puckTransform.position);
+        float distance = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
         // Receive puck when it gets close
         if (distance <= receiveRadius)
         {
-            if (puckRb != null && puckRb.linearVelocity.magnitude > 0.5f)
+            if (puckRb != null && PhysicsHelper.SpeedXZ(puckRb.linearVelocity) > 0.5f)
             {
                 // Check if armed for one-timer
                 if (isArmedForOneTimer)
@@ -393,14 +393,14 @@ public class TeammateController : MonoBehaviour
         }
 
         // Calculate direction to goal
-        Vector2 shotDirection = (nearestGoal.position - transform.position).normalized;
+        Vector3 shotDirection = PhysicsHelper.DirectionXZ(transform.position, nearestGoal.position);
 
         // Calculate shot power with multiplier
         float shotPower = oneTimerBasePower * oneTimerPowerMultiplier;
 
         // Apply shot force to puck
-        puckRb.linearVelocity = Vector2.zero; // Reset velocity
-        puckRb.AddForce(shotDirection * shotPower, ForceMode2D.Impulse);
+        puckRb.linearVelocity = Vector3.zero; // Reset velocity
+        puckRb.AddForce(shotDirection * shotPower, ForceMode.Impulse);
 
         // Set cooldown to prevent catching the puck immediately after one-timer
         oneTimerCooldown = 0.5f; // 0.5 second cooldown
@@ -449,7 +449,7 @@ public class TeammateController : MonoBehaviour
         // Draw formation position (if FormationManager exists)
         if (Application.isPlaying && FormationManager.Instance != null)
         {
-            Vector2 formationPos = FormationManager.Instance.GetFormationPosition(playerRole);
+            Vector3 formationPos = PhysicsHelper.ToWorldPosition(FormationManager.Instance.GetFormationPosition(playerRole));
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(formationPos, 0.5f);
             Gizmos.DrawLine(transform.position, formationPos);

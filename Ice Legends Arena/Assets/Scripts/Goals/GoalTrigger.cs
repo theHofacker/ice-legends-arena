@@ -3,9 +3,9 @@ using UnityEngine;
 /// <summary>
 /// Trigger component attached to goals. Detects when puck enters and notifies GameManager.
 /// Attach this to your goal GameObjects with a trigger collider.
-/// 100% transferable to 3D!
+/// Converted to 3D physics (XZ plane, Y = height).
 /// </summary>
-[RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(Collider))]
 public class GoalTrigger : MonoBehaviour
 {
     [Header("Goal Settings")]
@@ -22,12 +22,12 @@ public class GoalTrigger : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebugMessages = true;
 
-    private Collider2D goalCollider;
+    private Collider goalCollider;
     private AudioSource audioSource;
 
     private void Awake()
     {
-        goalCollider = GetComponent<Collider2D>();
+        goalCollider = GetComponent<Collider>();
 
         // Ensure collider is a trigger
         if (!goalCollider.isTrigger)
@@ -45,7 +45,7 @@ public class GoalTrigger : MonoBehaviour
         }
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter(Collider other)
     {
         // Check if puck entered the goal
         if (other.CompareTag("Puck"))
@@ -76,14 +76,14 @@ public class GoalTrigger : MonoBehaviour
         }
 
         // Determine who scored
-        // If puck enters player's goal → opponent scored
-        // If puck enters opponent's goal → player scored
+        // If puck enters player's goal -> opponent scored
+        // If puck enters opponent's goal -> player scored
         bool scoredByPlayer = !isPlayerGoal;
 
         if (showDebugMessages)
         {
             string scorer = scoredByPlayer ? "PLAYER" : "OPPONENT";
-            Debug.Log($"🚨 GOAL! {scorer} scored in {gameObject.name}");
+            Debug.Log($"GOAL! {scorer} scored in {gameObject.name}");
         }
 
         // Notify GameManager
@@ -119,20 +119,20 @@ public class GoalTrigger : MonoBehaviour
     /// </summary>
     private void OnDrawGizmos()
     {
-        Collider2D col = GetComponent<Collider2D>();
+        Collider col = GetComponent<Collider>();
         if (col != null)
         {
             // Draw goal area in editor
             Gizmos.color = isPlayerGoal ? new Color(1, 0, 0, 0.3f) : new Color(0, 1, 0, 0.3f);
             Gizmos.matrix = transform.localToWorldMatrix;
 
-            if (col is BoxCollider2D boxCol)
+            if (col is BoxCollider boxCol)
             {
-                Gizmos.DrawCube(boxCol.offset, boxCol.size);
+                Gizmos.DrawCube(boxCol.center, boxCol.size);
             }
-            else if (col is CircleCollider2D circleCol)
+            else if (col is SphereCollider sphereCol)
             {
-                Gizmos.DrawSphere(circleCol.offset, circleCol.radius);
+                Gizmos.DrawSphere(sphereCol.center, sphereCol.radius);
             }
         }
     }

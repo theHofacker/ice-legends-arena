@@ -8,6 +8,10 @@ using System.Collections.Generic;
 ///
 /// TEAM-AWARE: Supports multiple teams (Player and Opponent) with separate formations.
 /// Use GetFormationManager(team) to get the appropriate formation manager.
+///
+/// 3D Physics: Positions are Vector3 on XZ plane (X = rink length, Z = rink width, Y = height).
+/// FormationData offsets remain Vector2 (x = rink length, y = rink width) and are converted
+/// to 3D at usage time via PhysicsHelper.ToWorldPosition() or new Vector3(v.x, 0, v.y).
 /// </summary>
 public class FormationManager : MonoBehaviour
 {
@@ -32,7 +36,14 @@ public class FormationManager : MonoBehaviour
     [Tooltip("Current formation being used")]
     [SerializeField] private FormationType currentFormation = FormationType.Neutral;
 
-    [Header("Formation Offsets")]
+    [Header("Formation Data (ScriptableObjects)")]
+    [Tooltip("Selected offensive formation data (from pre-game selection)")]
+    [SerializeField] private FormationData offensiveFormationData;
+
+    [Tooltip("Selected defensive formation data (from pre-game selection)")]
+    [SerializeField] private FormationData defensiveFormationData;
+
+    [Header("Formation Offsets (Legacy/Fallback)")]
     [Tooltip("Offensive formation: positions relative to puck carrier")]
     [SerializeField] private FormationOffsets offensiveFormation;
 
@@ -62,11 +73,11 @@ public class FormationManager : MonoBehaviour
     [Range(10f, 40f)]
     [SerializeField] private float defenseMaxPushDistance = 25f;
 
-    [Tooltip("Max distance wings can drift from their lane (Y axis - up/down on screen)")]
+    [Tooltip("Max distance wings can drift from their lane (Z axis - left/right on rink)")]
     [Range(3f, 12f)]
     [SerializeField] private float wingLaneWidth = 8f;
 
-    [Tooltip("Max distance center can drift from center ice (Y axis - up/down on screen)")]
+    [Tooltip("Max distance center can drift from center ice (Z axis - left/right on rink)")]
     [Range(2f, 8f)]
     [SerializeField] private float centerLaneWidth = 5f;
 
@@ -102,29 +113,30 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Formation offsets for each player position
-    /// Defined for attack toward RIGHT (positive X direction)
-    /// X = rink length (depth/forward-back), Y = rink width (wing spread up/down)
+    /// Formation offsets for each player position (legacy/fallback).
+    /// Values are Vector2 where x = rink length (depth), y = rink width (lateral).
+    /// These are converted to 3D (x, 0, y) at usage time.
+    /// Defined for attack toward RIGHT (positive X direction).
     /// </summary>
     [System.Serializable]
     public class FormationOffsets
     {
         [Header("Forward Positions (relative to reference point)")]
-        [Tooltip("Center position offset (X = depth, Y = lateral)")]
-        public Vector2 centerOffset = new Vector2(-5, 0);      // Behind in X, center in Y
+        [Tooltip("Center position offset (X = depth, Y = lateral/rink width)")]
+        public Vector2 centerOffset = new Vector2(-5, 0);      // Behind in X, center in Z
 
-        [Tooltip("Left Wing position offset (X = depth, Y = lateral)")]
-        public Vector2 leftWingOffset = new Vector2(0, 10);    // Even depth in X, up in Y
+        [Tooltip("Left Wing position offset (X = depth, Y = lateral/rink width)")]
+        public Vector2 leftWingOffset = new Vector2(0, 10);    // Even depth in X, positive Z
 
-        [Tooltip("Right Wing position offset (X = depth, Y = lateral)")]
-        public Vector2 rightWingOffset = new Vector2(0, -10);  // Even depth in X, down in Y
+        [Tooltip("Right Wing position offset (X = depth, Y = lateral/rink width)")]
+        public Vector2 rightWingOffset = new Vector2(0, -10);  // Even depth in X, negative Z
 
         [Header("Defense Positions (relative to reference point)")]
-        [Tooltip("Left Defense position offset (X = depth, Y = lateral)")]
-        public Vector2 leftDefenseOffset = new Vector2(-12, 6);  // Far behind in X, up in Y
+        [Tooltip("Left Defense position offset (X = depth, Y = lateral/rink width)")]
+        public Vector2 leftDefenseOffset = new Vector2(-12, 6);  // Far behind in X, positive Z
 
-        [Tooltip("Right Defense position offset (X = depth, Y = lateral)")]
-        public Vector2 rightDefenseOffset = new Vector2(-12, -6);  // Far behind in X, down in Y
+        [Tooltip("Right Defense position offset (X = depth, Y = lateral/rink width)")]
+        public Vector2 rightDefenseOffset = new Vector2(-12, -6);  // Far behind in X, negative Z
     }
 
     private void Awake()
@@ -197,12 +209,12 @@ public class FormationManager : MonoBehaviour
             {
                 // Offensive: Formations defined for attack toward RIGHT (positive X)
                 // X = rink length (toward goals) = depth/forward-back
-                // Y = rink width (perpendicular to goals) = wing spread up/down on screen
+                // Y = rink width (perpendicular to goals) = wing spread (maps to Z in 3D)
                 centerOffset = new Vector2(-5, 0),        // Behind in X (trails puck carrier)
-                leftWingOffset = new Vector2(0, 10),      // Up in Y (spread up on screen), even depth
-                rightWingOffset = new Vector2(0, -10),    // Down in Y (spread down on screen), even depth
-                leftDefenseOffset = new Vector2(-12, 6),  // Far behind in X, up in Y
-                rightDefenseOffset = new Vector2(-12, -6) // Far behind in X, down in Y
+                leftWingOffset = new Vector2(0, 10),      // Positive Z (spread on rink width), even depth
+                rightWingOffset = new Vector2(0, -10),    // Negative Z (spread on rink width), even depth
+                leftDefenseOffset = new Vector2(-12, 6),  // Far behind in X, positive Z
+                rightDefenseOffset = new Vector2(-12, -6) // Far behind in X, negative Z
             };
         }
         if (defensiveFormation == null)
@@ -210,12 +222,12 @@ public class FormationManager : MonoBehaviour
             defensiveFormation = new FormationOffsets
             {
                 // Defensive: Collapse, protect goal (relative to own goal)
-                // X = rink length (toward goals), Y = rink width (up/down spread)
+                // X = rink length (toward goals), Y = rink width (maps to Z in 3D)
                 centerOffset = new Vector2(6, 0),         // Out from goal to pressure puck
-                leftWingOffset = new Vector2(8, 8),       // Out + up, collapse to defensive zone
-                rightWingOffset = new Vector2(8, -8),     // Out + down, collapse to defensive zone
-                leftDefenseOffset = new Vector2(3, 5),    // Cover slot, up
-                rightDefenseOffset = new Vector2(3, -5)   // Cover slot, down
+                leftWingOffset = new Vector2(8, 8),       // Out + positive Z, collapse to defensive zone
+                rightWingOffset = new Vector2(8, -8),     // Out + negative Z, collapse to defensive zone
+                leftDefenseOffset = new Vector2(3, 5),    // Cover slot, positive Z
+                rightDefenseOffset = new Vector2(3, -5)   // Cover slot, negative Z
             };
         }
         if (neutralFormation == null)
@@ -223,16 +235,120 @@ public class FormationManager : MonoBehaviour
             neutralFormation = new FormationOffsets
             {
                 // Neutral: Balanced positioning (relative to puck)
-                // X = rink length (toward goals), Y = rink width (up/down spread)
+                // X = rink length (toward goals), Y = rink width (maps to Z in 3D)
                 centerOffset = new Vector2(-3, 0),        // Trail behind slightly
-                leftWingOffset = new Vector2(0, 10),      // Up on screen, even depth
-                rightWingOffset = new Vector2(0, -10),    // Down on screen, even depth
-                leftDefenseOffset = new Vector2(-8, 6),   // Behind, up
-                rightDefenseOffset = new Vector2(-8, -6)  // Behind, down
+                leftWingOffset = new Vector2(0, 10),      // Positive Z, even depth
+                rightWingOffset = new Vector2(0, -10),    // Negative Z, even depth
+                leftDefenseOffset = new Vector2(-8, 6),   // Behind, positive Z
+                rightDefenseOffset = new Vector2(-8, -6)  // Behind, negative Z
             };
         }
 
         Debug.Log("FormationManager initialized");
+
+        // Load formations from pre-game selection (if available)
+        LoadFormationsFromSelection();
+    }
+
+    /// <summary>
+    /// Load formations selected in the pre-game Formation Selection screen
+    /// </summary>
+    private void LoadFormationsFromSelection()
+    {
+        // Only player team loads from selection screen
+        if (team == Team.Player)
+        {
+            if (FormationSelectionController.PlayerOffensiveFormation != null)
+            {
+                offensiveFormationData = FormationSelectionController.PlayerOffensiveFormation;
+                Debug.Log($"Loaded offensive formation: {offensiveFormationData.formationName}");
+            }
+
+            if (FormationSelectionController.PlayerDefensiveFormation != null)
+            {
+                defensiveFormationData = FormationSelectionController.PlayerDefensiveFormation;
+                Debug.Log($"Loaded defensive formation: {defensiveFormationData.formationName}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Set offensive formation at runtime
+    /// </summary>
+    public void SetOffensiveFormation(FormationData formation)
+    {
+        offensiveFormationData = formation;
+        Debug.Log($"[{team}] Offensive formation set to: {formation?.formationName ?? "null"}");
+    }
+
+    /// <summary>
+    /// Set defensive formation at runtime
+    /// </summary>
+    public void SetDefensiveFormation(FormationData formation)
+    {
+        defensiveFormationData = formation;
+        Debug.Log($"[{team}] Defensive formation set to: {formation?.formationName ?? "null"}");
+    }
+
+    /// <summary>
+    /// Get current offensive formation data
+    /// </summary>
+    public FormationData OffensiveFormation => offensiveFormationData;
+
+    /// <summary>
+    /// Get current defensive formation data
+    /// </summary>
+    public FormationData DefensiveFormation => defensiveFormationData;
+
+    /// <summary>
+    /// Try to get formation offset from FormationData ScriptableObject.
+    /// Returns Vector2 (x = rink length, y = rink width) from the ScriptableObject.
+    /// </summary>
+    private bool TryGetFormationDataOffset(PlayerRole role, out Vector2 offset)
+    {
+        offset = Vector2.zero;
+        FormationData activeFormation = null;
+
+        // Select formation based on current state
+        switch (currentFormation)
+        {
+            case FormationType.Offensive:
+                activeFormation = offensiveFormationData;
+                break;
+            case FormationType.Defensive:
+                activeFormation = defensiveFormationData;
+                break;
+            case FormationType.Neutral:
+                // Use offensive formation for neutral zone, or fallback
+                activeFormation = offensiveFormationData;
+                break;
+        }
+
+        if (activeFormation == null) return false;
+
+        // Convert PlayerRole to global PlayerPosition enum
+        PlayerPosition position = role switch
+        {
+            PlayerRole.Center => PlayerPosition.Center,
+            PlayerRole.LeftWing => PlayerPosition.LeftWing,
+            PlayerRole.RightWing => PlayerPosition.RightWing,
+            PlayerRole.LeftDefense => PlayerPosition.LeftDefense,
+            PlayerRole.RightDefense => PlayerPosition.RightDefense,
+            _ => PlayerPosition.Center
+        };
+
+        // Convert FormationType to ZoneType
+        ZoneType zone = currentFormation switch
+        {
+            FormationType.Offensive => ZoneType.Offensive,
+            FormationType.Defensive => ZoneType.Defensive,
+            FormationType.Neutral => ZoneType.Neutral,
+            _ => ZoneType.Neutral
+        };
+
+        // Get offset from FormationData (still Vector2: x = rink length, y = rink width)
+        offset = activeFormation.GetPositionForZone(position, zone);
+        return true;
     }
 
     private void Update()
@@ -266,7 +382,7 @@ public class FormationManager : MonoBehaviour
             {
                 if (teammate.enabled && teammate.isAI)
                 {
-                    float distanceToPuck = Vector2.Distance(teammate.transform.position, puckTransform.position);
+                    float distanceToPuck = PhysicsHelper.DistanceXZ(teammate.transform.position, puckTransform.position);
                     if (distanceToPuck < 1.5f)
                     {
                         playerHasPuck = true;
@@ -321,9 +437,9 @@ public class FormationManager : MonoBehaviour
         }
         else
         {
-            // Neutral - check puck position relative to our goal
-            float puckDistanceToOwnGoal = Vector2.Distance(puckTransform.position, ownGoal.position);
-            float puckDistanceToOpponentGoal = Vector2.Distance(puckTransform.position, playerGoal.position);
+            // Neutral - check puck position relative to our goal (XZ plane distance)
+            float puckDistanceToOwnGoal = PhysicsHelper.DistanceXZ(puckTransform.position, ownGoal.position);
+            float puckDistanceToOpponentGoal = PhysicsHelper.DistanceXZ(puckTransform.position, playerGoal.position);
 
             if (puckDistanceToOwnGoal < puckDistanceToOpponentGoal - formationSwitchDistance)
             {
@@ -348,25 +464,35 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get target formation position for a specific player role (with zone constraints)
+    /// Get target formation position for a specific player role (with zone constraints).
+    /// Returns Vector3 on XZ plane (Y = 0).
     /// </summary>
-    public Vector2 GetFormationPosition(PlayerRole role)
+    public Vector3 GetFormationPosition(PlayerRole role)
     {
-        if (puckTransform == null) return Vector2.zero;
+        if (puckTransform == null) return Vector3.zero;
 
-        FormationOffsets formation = GetCurrentFormation();
-        Vector2 referencePoint = GetReferencePoint();
+        Vector3 referencePoint = GetReferencePoint();
+        Vector2 offset;
 
-        // Get base offset based on role
-        Vector2 offset = role switch
+        // Try to use FormationData ScriptableObject first
+        if (TryGetFormationDataOffset(role, out Vector2 dataOffset))
         {
-            PlayerRole.Center => formation.centerOffset,
-            PlayerRole.LeftWing => formation.leftWingOffset,
-            PlayerRole.RightWing => formation.rightWingOffset,
-            PlayerRole.LeftDefense => formation.leftDefenseOffset,
-            PlayerRole.RightDefense => formation.rightDefenseOffset,
-            _ => Vector2.zero
-        };
+            offset = dataOffset;
+        }
+        else
+        {
+            // Fallback to legacy FormationOffsets
+            FormationOffsets formation = GetCurrentFormation();
+            offset = role switch
+            {
+                PlayerRole.Center => formation.centerOffset,
+                PlayerRole.LeftWing => formation.leftWingOffset,
+                PlayerRole.RightWing => formation.rightWingOffset,
+                PlayerRole.LeftDefense => formation.leftDefenseOffset,
+                PlayerRole.RightDefense => formation.rightDefenseOffset,
+                _ => Vector2.zero
+            };
+        }
 
         Vector2 originalOffset = offset;
 
@@ -395,9 +521,12 @@ public class FormationManager : MonoBehaviour
             offset = TransformOffsetForAttackDirection(offset);
         }
 
+        // Convert Vector2 offset (x = rink length, y = rink width) to Vector3 (x, 0, z)
+        Vector3 offset3D = PhysicsHelper.ToWorldPosition(offset);
+
         // Calculate absolute position
-        Vector2 targetPosition = referencePoint + offset;
-        Vector2 beforeConstraints = targetPosition;
+        Vector3 targetPosition = referencePoint + offset3D;
+        Vector3 beforeConstraints = targetPosition;
 
         // Apply zone constraints if enabled
         if (useZoneConstraints)
@@ -416,15 +545,17 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply defensive style modifications to formation offset
-    /// Based on Weiss Tech Playbook defensive systems
+    /// Apply defensive style modifications to formation offset.
+    /// Operates on Vector2 offsets (x = rink length, y = rink width).
+    /// Based on Weiss Tech Playbook defensive systems.
     /// </summary>
     private Vector2 ApplyDefensiveStyle(Vector2 baseOffset, PlayerRole role)
     {
         if (puckTransform == null || ownGoal == null) return baseOffset;
 
         // Determine strong-side (side where puck is) vs weak-side
-        bool puckOnLeftSide = puckTransform.position.y > ownGoal.position.y;
+        // Z axis = rink width (was Y in 2D)
+        bool puckOnLeftSide = puckTransform.position.z > ownGoal.position.z;
         bool isStrongSide = (puckOnLeftSide && (role == PlayerRole.LeftWing || role == PlayerRole.LeftDefense)) ||
                             (!puckOnLeftSide && (role == PlayerRole.RightWing || role == PlayerRole.RightDefense));
 
@@ -451,7 +582,8 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Box +1: Passive box formation protecting slot
+    /// Box +1: Passive box formation protecting slot.
+    /// Operates on Vector2 offsets (x = rink length, y = rink width).
     /// </summary>
     private Vector2 ApplyBoxPlusOneStyle(Vector2 baseOffset, PlayerRole role)
     {
@@ -474,7 +606,8 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Sagging Zone (Wedge Plus One): Weak-side forward sags to slot
+    /// Sagging Zone (Wedge Plus One): Weak-side forward sags to slot.
+    /// Operates on Vector2 offsets (x = rink length, y = rink width).
     /// </summary>
     private Vector2 ApplySaggingZoneStyle(Vector2 baseOffset, PlayerRole role, bool isStrongSide)
     {
@@ -501,7 +634,8 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Sagging Zone Arrow: Aggressive high pressure variant
+    /// Sagging Zone Arrow: Aggressive high pressure variant.
+    /// Operates on Vector2 offsets (x = rink length, y = rink width).
     /// </summary>
     private Vector2 ApplySaggingZoneArrowStyle(Vector2 baseOffset, PlayerRole role, bool isStrongSide)
     {
@@ -531,9 +665,10 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Transform formation offset based on attack direction
-    /// Formations are defined assuming attack toward RIGHT (positive X)
-    /// This method flips X component if attacking toward LEFT (negative X)
+    /// Transform formation offset based on attack direction.
+    /// Formations are defined assuming attack toward RIGHT (positive X).
+    /// This method flips X component if attacking toward LEFT (negative X).
+    /// Operates on Vector2 offsets (x = rink length, y = rink width).
     /// </summary>
     private Vector2 TransformOffsetForAttackDirection(Vector2 baseOffset)
     {
@@ -560,51 +695,54 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply zone/lane constraints to keep players in realistic positions
+    /// Apply zone/lane constraints to keep players in realistic positions.
+    /// Operates on Vector3 positions (XZ plane).
+    /// Z axis = rink width (was Y in 2D).
     /// </summary>
-    private Vector2 ApplyZoneConstraints(Vector2 targetPosition, PlayerRole role)
+    private Vector3 ApplyZoneConstraints(Vector3 targetPosition, PlayerRole role)
     {
         if (ownGoal == null) return targetPosition;
 
-        Vector2 constrainedPosition = targetPosition;
+        Vector3 constrainedPosition = targetPosition;
 
         switch (role)
         {
             case PlayerRole.LeftDefense:
             case PlayerRole.RightDefense:
-                // Defensemen: Can't push past certain distance from own goal (X axis = toward goals)
-                float distanceFromOwnGoal = Vector2.Distance(targetPosition, ownGoal.position);
+                // Defensemen: Can't push past certain distance from own goal (XZ plane)
+                float distanceFromOwnGoal = PhysicsHelper.DistanceXZ(targetPosition, ownGoal.position);
                 if (distanceFromOwnGoal > defenseMaxPushDistance)
                 {
                     // Clamp to max push distance
-                    Vector2 directionFromGoal = (targetPosition - (Vector2)ownGoal.position).normalized;
-                    constrainedPosition = (Vector2)ownGoal.position + directionFromGoal * defenseMaxPushDistance;
+                    Vector3 directionFromGoal = PhysicsHelper.DirectionXZ(ownGoal.position, targetPosition);
+                    constrainedPosition = ownGoal.position + directionFromGoal * defenseMaxPushDistance;
+                    constrainedPosition.y = 0f; // Keep on ice
                 }
 
-                // Also stay on their side (Y axis = up/down on screen)
+                // Also stay on their side (Z axis = rink width)
                 if (role == PlayerRole.LeftDefense)
                 {
-                    constrainedPosition.y = Mathf.Max(constrainedPosition.y, 3f); // Stay up (positive Y)
+                    constrainedPosition.z = Mathf.Max(constrainedPosition.z, 3f); // Stay positive Z
                 }
                 else // RightDefense
                 {
-                    constrainedPosition.y = Mathf.Min(constrainedPosition.y, -3f); // Stay down (negative Y)
+                    constrainedPosition.z = Mathf.Min(constrainedPosition.z, -3f); // Stay negative Z
                 }
                 break;
 
             case PlayerRole.LeftWing:
-                // Left wing: Stay in upper lane (Y axis = up/down on screen)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, wingLaneWidth, 100f);
+                // Left wing: Stay in positive Z lane (rink width)
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, wingLaneWidth, 100f);
                 break;
 
             case PlayerRole.RightWing:
-                // Right wing: Stay in lower lane (Y axis = up/down on screen)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, -100f, -wingLaneWidth);
+                // Right wing: Stay in negative Z lane (rink width)
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -100f, -wingLaneWidth);
                 break;
 
             case PlayerRole.Center:
-                // Center: Stay near center ice (don't drift too far up/down on Y axis)
-                constrainedPosition.y = Mathf.Clamp(constrainedPosition.y, -centerLaneWidth, centerLaneWidth);
+                // Center: Stay near center ice (don't drift too far on Z axis)
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -centerLaneWidth, centerLaneWidth);
                 break;
         }
 
@@ -626,9 +764,10 @@ public class FormationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get reference point for formation positioning
+    /// Get reference point for formation positioning.
+    /// Returns Vector3 on XZ plane.
     /// </summary>
-    private Vector2 GetReferencePoint()
+    private Vector3 GetReferencePoint()
     {
         switch (currentFormation)
         {
@@ -636,24 +775,24 @@ public class FormationManager : MonoBehaviour
                 // Offensive: positions relative to puck carrier (or puck if loose)
                 if (PlayerManager.Instance != null && PlayerManager.Instance.CurrentPlayer != null)
                 {
-                    return PlayerManager.Instance.CurrentPlayer.transform.position;
+                    return PhysicsHelper.FlattenY(PlayerManager.Instance.CurrentPlayer.transform.position);
                 }
-                return puckTransform.position;
+                return PhysicsHelper.FlattenY(puckTransform.position);
 
             case FormationType.Defensive:
                 // Defensive: positions relative to own goal
                 if (ownGoal != null)
                 {
-                    return ownGoal.position;
+                    return PhysicsHelper.FlattenY(ownGoal.position);
                 }
-                return Vector2.zero;
+                return Vector3.zero;
 
             case FormationType.Neutral:
                 // Neutral: positions relative to center ice (puck location)
-                return puckTransform.position;
+                return PhysicsHelper.FlattenY(puckTransform.position);
 
             default:
-                return puckTransform.position;
+                return PhysicsHelper.FlattenY(puckTransform.position);
         }
     }
 
@@ -687,10 +826,11 @@ public class FormationManager : MonoBehaviour
     public FormationType CurrentFormation => currentFormation;
 
     /// <summary>
-    /// Get face-off position for a specific player role
-    /// Traditional hockey face-off formation: centers at circle, wings on dots, defense back
+    /// Get face-off position for a specific player role.
+    /// Returns Vector3 on XZ plane (Y = 0).
+    /// Traditional hockey face-off formation: centers at circle, wings on dots, defense back.
     /// </summary>
-    public Vector2 GetFaceOffPosition(PlayerRole role, Vector2 centerIcePosition)
+    public Vector3 GetFaceOffPosition(PlayerRole role, Vector3 centerIcePosition)
     {
         // Determine which side we're on based on which goal we defend
         // If we defend right goal (positive X), we position to the RIGHT of center (positive X offset)
@@ -699,20 +839,21 @@ public class FormationManager : MonoBehaviour
 
         // Face-off formation positions (relative to center ice)
         // Players position themselves between center ice and their defensive goal
-        Vector2 offset = role switch
+        // X = rink length, Z = rink width (was Y in 2D)
+        Vector3 offset = role switch
         {
             // Center: at face-off circle (2m from center toward own goal)
-            PlayerRole.Center => new Vector2(defendingRightGoal ? 2f : -2f, 0f),
+            PlayerRole.Center => new Vector3(defendingRightGoal ? 2f : -2f, 0f, 0f),
 
-            // Wings: on face-off dots (5m from center toward own goal, 8m up/down)
-            PlayerRole.LeftWing => new Vector2(defendingRightGoal ? 5f : -5f, 8f),
-            PlayerRole.RightWing => new Vector2(defendingRightGoal ? 5f : -5f, -8f),
+            // Wings: on face-off dots (5m from center toward own goal, 8m on Z axis)
+            PlayerRole.LeftWing => new Vector3(defendingRightGoal ? 5f : -5f, 0f, 8f),
+            PlayerRole.RightWing => new Vector3(defendingRightGoal ? 5f : -5f, 0f, -8f),
 
-            // Defense: back from face-off (12m from center toward own goal, 6m up/down)
-            PlayerRole.LeftDefense => new Vector2(defendingRightGoal ? 12f : -12f, 6f),
-            PlayerRole.RightDefense => new Vector2(defendingRightGoal ? 12f : -12f, -6f),
+            // Defense: back from face-off (12m from center toward own goal, 6m on Z axis)
+            PlayerRole.LeftDefense => new Vector3(defendingRightGoal ? 12f : -12f, 0f, 6f),
+            PlayerRole.RightDefense => new Vector3(defendingRightGoal ? 12f : -12f, 0f, -6f),
 
-            _ => Vector2.zero
+            _ => Vector3.zero
         };
 
         return centerIcePosition + offset;
@@ -733,7 +874,7 @@ public class FormationManager : MonoBehaviour
 
     private void DrawFormationPosition(PlayerRole role, Color color)
     {
-        Vector2 position = GetFormationPosition(role);
+        Vector3 position = GetFormationPosition(role);
         Gizmos.color = color;
         Gizmos.DrawWireSphere(position, 0.5f);
         Gizmos.DrawLine(GetReferencePoint(), position);

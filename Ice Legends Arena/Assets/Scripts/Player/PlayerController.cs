@@ -2,9 +2,10 @@ using UnityEngine;
 
 /// <summary>
 /// Physics-based player movement controller for ice hockey gameplay.
-/// Uses Rigidbody2D with direct velocity manipulation for smooth, ice-like movement.
+/// Uses Rigidbody with direct velocity manipulation for smooth, ice-like movement.
+/// Movement is on the XZ plane (X = rink length, Z = rink width), Y = height.
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody))]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement Settings")]
@@ -14,7 +15,7 @@ public class PlayerController : MonoBehaviour
 
     [Tooltip("How quickly the player accelerates from rest")]
     [Range(0.1f, 30f)]
-    [SerializeField] private float acceleration = 10f;
+    public float acceleration = 10f; // Made public for Shapeshift ability
 
     [Tooltip("How quickly the player decelerates to a stop (ice sliding)")]
     [Range(0.1f, 30f)]
@@ -24,17 +25,15 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private bool showVelocityGizmo = true;
 
     // Component references
-    private Rigidbody2D rb;
+    private Rigidbody rb;
     private InputManager inputManager;
-    private SpriteRenderer spriteRenderer;
     private ShootingController shootingController;
 
     private void Awake()
     {
-        rb = GetComponent<Rigidbody2D>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
+        rb = GetComponent<Rigidbody>();
 
-        // Validate Rigidbody2D settings
+        // Validate Rigidbody settings
         ValidateRigidbodySettings();
     }
 
@@ -57,7 +56,6 @@ public class PlayerController : MonoBehaviour
         if (inputManager == null) return;
 
         HandleMovement();
-        UpdateSpriteDirection();
     }
 
     /// <summary>
@@ -65,8 +63,8 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     private void HandleMovement()
     {
-        // Get input from InputManager (already normalized -1 to 1)
-        Vector2 moveInput = inputManager.MoveInput;
+        // Get input from InputManager and convert to world XZ direction
+        Vector3 moveInput = PhysicsHelper.InputToWorld(inputManager.MoveInput);
 
         // Apply movement multiplier if charging a shot
         float speedMultiplier = 1f;
@@ -75,59 +73,51 @@ public class PlayerController : MonoBehaviour
             speedMultiplier = shootingController.ChargingMovementMultiplier;
         }
 
-        // Calculate target velocity based on input direction and multiplier
-        Vector2 targetVelocity = moveInput * moveSpeed * speedMultiplier;
+        // Calculate target velocity based on input direction and multiplier (XZ plane only)
+        Vector3 targetVelocity = moveInput * moveSpeed * speedMultiplier;
 
         // Choose acceleration or deceleration based on input presence
-        // Deceleration is faster to allow for quick stops while maintaining ice slide feel
         float lerpRate = (moveInput.magnitude > 0.1f) ? acceleration : deceleration;
 
-        // Smoothly interpolate current velocity toward target velocity
-        // This creates smooth acceleration/deceleration curves
-        Vector2 newVelocity = Vector2.Lerp(
-            rb.linearVelocity,
+        // Smoothly interpolate current velocity toward target velocity (XZ only, preserve Y)
+        Vector3 currentVelocity = rb.linearVelocity;
+        Vector3 newVelocity = Vector3.Lerp(
+            new Vector3(currentVelocity.x, 0f, currentVelocity.z),
             targetVelocity,
             lerpRate * Time.fixedDeltaTime
         );
 
-        // Apply the calculated velocity to the rigidbody
-        rb.linearVelocity = newVelocity;
+        // Apply the calculated velocity, keeping Y velocity for any vertical physics
+        rb.linearVelocity = new Vector3(newVelocity.x, currentVelocity.y, newVelocity.z);
+
+        // Rotate model to face movement direction
+        if (moveInput.magnitude > 0.1f)
+        {
+            float targetAngle = Mathf.Atan2(moveInput.x, moveInput.z) * Mathf.Rad2Deg;
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.Euler(0f, targetAngle, 0f),
+                10f * Time.fixedDeltaTime
+            );
+        }
     }
 
     /// <summary>
-    /// Updates sprite direction based on horizontal movement input
-    /// </summary>
-    private void UpdateSpriteDirection()
-    {
-        if (spriteRenderer == null) return;
-
-        Vector2 moveInput = inputManager.MoveInput;
-
-        // Flip sprite based on horizontal movement
-        if (moveInput.x > 0.1f) // Moving right
-        {
-            spriteRenderer.flipX = false;
-        }
-        else if (moveInput.x < -0.1f) // Moving left
-        {
-            spriteRenderer.flipX = true;
-        }
-        // Don't flip if no horizontal input (keep last direction)
-    }
-
-    /// <summary>
-    /// Validates that Rigidbody2D is configured correctly for ice hockey physics
+    /// Validates that Rigidbody is configured correctly for ice hockey physics
     /// </summary>
     private void ValidateRigidbodySettings()
     {
-        if (rb.gravityScale != 0)
+        if (rb.useGravity)
         {
-            Debug.LogWarning($"PlayerController: Rigidbody2D gravity scale should be 0 for top-down movement. Current: {rb.gravityScale}", this);
+            Debug.LogWarning($"PlayerController: Rigidbody useGravity should be false for ice surface movement. Current: {rb.useGravity}", this);
         }
 
-        if (rb.constraints != RigidbodyConstraints2D.FreezeRotation)
+        // Players should freeze Y position (stay on ice) and freeze all rotation (no tipping)
+        RigidbodyConstraints expectedConstraints = RigidbodyConstraints.FreezePositionY |
+                                                    RigidbodyConstraints.FreezeRotation;
+        if (rb.constraints != expectedConstraints)
         {
-            Debug.LogWarning("PlayerController: Consider freezing rotation to prevent spinning", this);
+            Debug.LogWarning("PlayerController: Consider freezing Y position and all rotation for ice hockey", this);
         }
     }
 
@@ -141,7 +131,7 @@ public class PlayerController : MonoBehaviour
         // Draw velocity vector
         Gizmos.color = Color.green;
         Vector3 start = transform.position;
-        Vector3 end = start + new Vector3(rb.linearVelocity.x, rb.linearVelocity.y, 0);
+        Vector3 end = start + rb.linearVelocity;
         Gizmos.DrawLine(start, end);
         Gizmos.DrawSphere(end, 0.1f);
     }

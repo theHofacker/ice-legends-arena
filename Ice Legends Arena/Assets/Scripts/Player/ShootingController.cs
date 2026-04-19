@@ -2,8 +2,9 @@ using UnityEngine;
 
 /// <summary>
 /// Handles player shooting mechanics including wrist shots, slapshots, and auto-aim.
+/// 3D physics: shots travel on XZ plane, roof shots add upward Y force.
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody))]
 public class ShootingController : MonoBehaviour
 {
     [Header("Shot Power Settings")]
@@ -13,7 +14,7 @@ public class ShootingController : MonoBehaviour
 
     [Tooltip("Power multiplier for slapshot (hold)")]
     [Range(1.5f, 3f)]
-    public float slapShotPower = 2f; // Made public for CharacterStatsApplier (renamed from slapshotMultiplier)
+    public float slapShotPower = 2f; // Made public for CharacterStatsApplier
 
     [Header("Auto-Aim Settings")]
     [Tooltip("Enable auto-aim toward goal")]
@@ -60,24 +61,28 @@ public class ShootingController : MonoBehaviour
     [Range(0.8f, 1.5f)]
     [SerializeField] private float roofShotPowerMultiplier = 1.2f;
 
+    [Tooltip("Upward force for roof shots (Y-axis lift)")]
+    [Range(1f, 15f)]
+    [SerializeField] private float roofShotLiftForce = 5f;
+
     [Header("Visual Feedback")]
     [SerializeField] private bool showAimDebug = true;
     [SerializeField] private LineRenderer aimIndicator;
     [SerializeField] private float aimIndicatorLength = 5f;
 
     // Component references
-    private Rigidbody2D playerRb;
+    private Rigidbody playerRb;
     private Transform puckTransform;
-    private Rigidbody2D puckRb;
+    private Rigidbody puckRb;
     private Transform nearestGoal;
     private TimingMeter timingMeter;
 
-    // State
-    private Vector2 lastMoveDirection = Vector2.right;
-    private Vector2 facingDirectionAtChargeStart = Vector2.right; // Lock facing direction when charge starts
+    // State - all directions are on XZ plane (Y=0) unless noted
+    private Vector3 lastMoveDirection = Vector3.right;
+    private Vector3 facingDirectionAtChargeStart = Vector3.right;
     private bool isChargingShot = false;
     private bool isManuallyAiming = false;
-    private Vector2 manualAimDirection = Vector2.right;
+    private Vector3 manualAimDirection = Vector3.right;
     private bool isRoofShot = false;
 
     // Public properties for other components
@@ -87,7 +92,7 @@ public class ShootingController : MonoBehaviour
 
     private void Awake()
     {
-        playerRb = GetComponent<Rigidbody2D>();
+        playerRb = GetComponent<Rigidbody>();
     }
 
     private void Start()
@@ -97,15 +102,14 @@ public class ShootingController : MonoBehaviour
         if (puck != null)
         {
             puckTransform = puck.transform;
-            puckRb = puck.GetComponent<Rigidbody2D>();
+            puckRb = puck.GetComponent<Rigidbody>();
         }
         else
         {
             Debug.LogError("ShootingController: No Puck found! Tag your puck with 'Puck' tag.");
         }
 
-        // Find nearest goal (for now, just find any goal)
-        // TODO: Determine which goal to shoot at based on team
+        // Find nearest goal
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
         if (goals.Length > 0)
         {
@@ -136,9 +140,9 @@ public class ShootingController : MonoBehaviour
         // Track movement direction for shooting
         if (InputManager.Instance != null)
         {
-            Vector2 moveInput = InputManager.Instance.MoveInput;
+            Vector3 moveInput = PhysicsHelper.InputToWorld(InputManager.Instance.MoveInput);
 
-            // Only update facing direction when NOT charging (so player doesn't turn around during roof shot)
+            // Only update facing direction when NOT charging
             if (moveInput.magnitude > 0.1f && !isChargingShot)
             {
                 lastMoveDirection = moveInput.normalized;
@@ -150,16 +154,14 @@ public class ShootingController : MonoBehaviour
                 if (moveInput.magnitude >= aimInputThreshold)
                 {
                     // Player is aiming with joystick - clamp to valid angle
-                    Vector2 desiredAim = moveInput.normalized;
+                    Vector3 desiredAim = moveInput.normalized;
 
-                    // Constrain aim to cone relative to ORIGINAL facing direction (when charge started)
-                    float angleToDesired = Vector2.SignedAngle(facingDirectionAtChargeStart, desiredAim);
+                    // Check for ROOF SHOT: pulling joystick back (opposite of facing direction)
+                    float angleToDesired = PhysicsHelper.SignedAngleXZ(facingDirectionAtChargeStart, desiredAim);
 
-                    // Check for ROOF SHOT: pulling joystick back/down (opposite of facing direction)
                     if (roofShotEnabled && Mathf.Abs(angleToDesired) >= roofShotAngleThreshold)
                     {
                         isRoofShot = true;
-                        // Aim indicator shows roof shot (different color)
                         if (aimIndicator != null)
                         {
                             aimIndicator.startColor = Color.magenta;
@@ -173,21 +175,13 @@ public class ShootingController : MonoBehaviour
 
                         if (Mathf.Abs(angleToDesired) > maxAimAngle)
                         {
-                            // Clamp to max angle
+                            // Clamp to max angle - rotate around Y axis
                             float clampedAngle = Mathf.Sign(angleToDesired) * maxAimAngle;
-                            float radians = clampedAngle * Mathf.Deg2Rad;
-
-                            // Rotate lastMoveDirection by clamped angle
-                            float cos = Mathf.Cos(radians);
-                            float sin = Mathf.Sin(radians);
-                            manualAimDirection = new Vector2(
-                                lastMoveDirection.x * cos - lastMoveDirection.y * sin,
-                                lastMoveDirection.x * sin + lastMoveDirection.y * cos
-                            ).normalized;
+                            manualAimDirection = Quaternion.Euler(0f, -clampedAngle, 0f) * lastMoveDirection;
+                            manualAimDirection = PhysicsHelper.FlattenY(manualAimDirection).normalized;
                         }
                         else
                         {
-                            // Within valid cone
                             manualAimDirection = desiredAim;
                         }
                     }
@@ -197,7 +191,6 @@ public class ShootingController : MonoBehaviour
                 }
                 else
                 {
-                    // Below threshold - use auto-aim
                     isManuallyAiming = false;
                     isRoofShot = false;
                     UpdateAimIndicator(CalculateShotDirection());
@@ -205,7 +198,6 @@ public class ShootingController : MonoBehaviour
             }
             else
             {
-                // Not charging - hide aim indicator
                 if (aimIndicator != null)
                 {
                     aimIndicator.enabled = false;
@@ -220,7 +212,7 @@ public class ShootingController : MonoBehaviour
         if (timingMeter != null && HasPossession())
         {
             isChargingShot = true;
-            facingDirectionAtChargeStart = lastMoveDirection; // Lock the facing direction
+            facingDirectionAtChargeStart = lastMoveDirection;
             timingMeter.StartCharging();
         }
     }
@@ -231,27 +223,20 @@ public class ShootingController : MonoBehaviour
 
         bool wasRoofShot = isRoofShot;
         isChargingShot = false;
-        isRoofShot = false; // Reset roof shot state
+        isRoofShot = false;
 
-        // Stop the timing meter and get result
         if (timingMeter != null)
         {
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             float powerMultiplier = timingMeter.GetPowerMultiplier(result);
-
-            // Execute shot with timing multiplier (and roof shot if applicable)
             ExecuteTimedShot(powerMultiplier, result, wasRoofShot);
         }
     }
 
     private void HandleShootRequested(bool isCharged)
     {
-        // This is now mainly for tap shots (wrist shots without timing)
-        // Charged shots use the timing system via StartChargingShot/StopChargingShot
-
         if (!isCharged)
         {
-            // Quick tap - execute wrist shot immediately
             if (HasPossession())
             {
                 ExecuteWristShot();
@@ -261,57 +246,63 @@ public class ShootingController : MonoBehaviour
 
     private void ExecuteWristShot()
     {
-        Vector2 shotDirection = CalculateShotDirection();
-        ApplyShotForce(shotDirection, wristShotPower);
+        Vector3 shotDirection = CalculateShotDirection();
+        ApplyShotForce(shotDirection, wristShotPower, false);
 
         Debug.Log($"Wrist shot! Power: {wristShotPower}, Direction: {shotDirection}");
     }
 
     private void ExecuteSlapshot()
     {
-        Vector2 shotDirection = CalculateShotDirection();
+        Vector3 shotDirection = CalculateShotDirection();
         float slapshotPower = wristShotPower * slapShotPower;
-        ApplyShotForce(shotDirection, slapshotPower);
+        ApplyShotForce(shotDirection, slapshotPower, false);
 
         Debug.Log($"Slapshot! Power: {slapshotPower}, Direction: {shotDirection}");
 
-        // TODO: Add screen shake effect
+        if (PuckFollowCamera.Instance != null)
+        {
+            PuckFollowCamera.Instance.TriggerSlapShotShake();
+        }
     }
 
     private void ExecuteTimedShot(float powerMultiplier, TimingMeter.TimingResult result, bool isRoof = false)
     {
         if (!HasPossession()) return;
 
-        Vector2 shotDirection = CalculateShotDirection();
-        float basePower = wristShotPower * slapShotPower; // Use slapshot base power
+        Vector3 shotDirection = CalculateShotDirection();
+        float basePower = wristShotPower * slapShotPower;
         float finalPower = basePower * powerMultiplier;
 
-        // Apply roof shot multiplier if applicable
         if (isRoof)
         {
             finalPower *= roofShotPowerMultiplier;
         }
 
-        ApplyShotForce(shotDirection, finalPower);
+        ApplyShotForce(shotDirection, finalPower, isRoof);
 
         string resultText = result == TimingMeter.TimingResult.Perfect ? "PERFECT" :
                            result == TimingMeter.TimingResult.Weak ? "WEAK" : "OVERCHARGED";
 
         if (isRoof)
         {
-            Debug.Log($"ROOF SHOT ({resultText})! Power: {finalPower} (roof multiplier: {roofShotPowerMultiplier}x)");
-            // TODO: Show "ROOF!" text overlay
-            // TODO: Add roof shot visual effects (arc trajectory)
+            Debug.Log($"ROOF SHOT ({resultText})! Power: {finalPower} (roof multiplier: {roofShotPowerMultiplier}x, lift: {roofShotLiftForce})");
         }
         else
         {
             Debug.Log($"Timed shot ({resultText})! Power: {finalPower} (base: {basePower}, multiplier: {powerMultiplier}x)");
         }
 
-        // TODO: Add visual/audio feedback based on timing result
+        if (result == TimingMeter.TimingResult.Perfect || isRoof)
+        {
+            if (PuckFollowCamera.Instance != null)
+            {
+                PuckFollowCamera.Instance.TriggerSlapShotShake();
+            }
+        }
     }
 
-    private Vector2 CalculateShotDirection()
+    private Vector3 CalculateShotDirection()
     {
         // If roof shot, ALWAYS shoot forward (ignore the backwards pull)
         if (isRoofShot)
@@ -326,73 +317,84 @@ public class ShootingController : MonoBehaviour
         }
 
         // Start with player's facing direction
-        Vector2 baseDirection = lastMoveDirection;
+        Vector3 baseDirection = lastMoveDirection;
 
         // Apply auto-aim if enabled and goal exists
         if (autoAimEnabled && nearestGoal != null)
         {
-            // Calculate direction to goal
-            Vector2 toGoal = (nearestGoal.position - transform.position).normalized;
+            Vector3 toGoal = PhysicsHelper.DirectionXZ(transform.position, nearestGoal.position);
 
-            // Check if goal is within auto-aim cone
-            float angleToGoal = Vector2.Angle(baseDirection, toGoal);
+            float angleToGoal = PhysicsHelper.AngleXZ(baseDirection, toGoal);
 
             if (angleToGoal <= maxAutoAimAngle)
             {
-                // Blend between player direction and goal direction
-                baseDirection = Vector2.Lerp(baseDirection, toGoal, autoAimStrength).normalized;
+                baseDirection = Vector3.Lerp(baseDirection, toGoal, autoAimStrength).normalized;
+                baseDirection = PhysicsHelper.FlattenY(baseDirection).normalized;
             }
         }
 
         return baseDirection;
     }
 
-    private void ApplyShotForce(Vector2 direction, float power)
+    private void ApplyShotForce(Vector3 direction, float power, bool isRoof)
     {
         if (puckRb == null) return;
 
-        // Apply impulse force to puck
-        puckRb.linearVelocity = Vector2.zero; // Reset current velocity
-        puckRb.AddForce(direction * power, ForceMode2D.Impulse);
+        // Check for Trick Shot modifier
+        TrickShotModifier trickShot = GetComponent<TrickShotModifier>();
+        if (trickShot != null && trickShot.IsLoaded)
+        {
+            trickShot.ApplyToPuck(puckRb.gameObject);
+            Debug.Log("Trick Shot applied to puck!");
+        }
+
+        // Reset current velocity
+        puckRb.linearVelocity = Vector3.zero;
+
+        // Apply force on XZ plane
+        Vector3 force = PhysicsHelper.FlattenY(direction).normalized * power;
+
+        // Add upward Y force for roof shots - puck actually lifts off the ice!
+        if (isRoof)
+        {
+            force.y = roofShotLiftForce;
+        }
+
+        puckRb.AddForce(force, ForceMode.Impulse);
     }
 
     private bool HasPossession()
     {
         if (puckTransform == null) return false;
 
-        float distance = Vector2.Distance(transform.position, puckTransform.position);
+        float distance = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
         return distance <= possessionRadius;
     }
 
-    private void UpdateAimIndicator(Vector2 direction)
+    private void UpdateAimIndicator(Vector3 direction)
     {
         if (aimIndicator == null) return;
 
-        // Enable and position the line
         aimIndicator.enabled = true;
 
         Vector3 startPos = transform.position;
-        Vector3 endPos = startPos + (Vector3)(direction * aimIndicatorLength);
+        Vector3 endPos = startPos + direction * aimIndicatorLength;
 
         aimIndicator.SetPosition(0, startPos);
         aimIndicator.SetPosition(1, endPos);
 
-        // Color the line based on shot type
         if (isRoofShot)
         {
-            // Magenta for roof shot
             aimIndicator.startColor = Color.magenta;
             aimIndicator.endColor = Color.magenta;
         }
         else if (isManuallyAiming)
         {
-            // Cyan for manual aim
             aimIndicator.startColor = Color.cyan;
             aimIndicator.endColor = Color.cyan;
         }
         else
         {
-            // Yellow for auto-aim
             aimIndicator.startColor = Color.yellow;
             aimIndicator.endColor = Color.yellow;
         }
@@ -402,22 +404,19 @@ public class ShootingController : MonoBehaviour
     {
         if (!showAimDebug) return;
 
-        // Draw possession radius
         Gizmos.color = HasPossession() ? Color.green : Color.yellow;
         Gizmos.DrawWireSphere(transform.position, possessionRadius);
 
-        // Draw shot direction
         if (Application.isPlaying)
         {
-            Vector2 shotDir = CalculateShotDirection();
+            Vector3 shotDir = CalculateShotDirection();
             Gizmos.color = Color.red;
             Gizmos.DrawRay(transform.position, shotDir * 5f);
 
-            // Draw auto-aim cone
             if (autoAimEnabled && nearestGoal != null)
             {
                 Gizmos.color = Color.cyan;
-                Vector2 toGoal = (nearestGoal.position - transform.position).normalized;
+                Vector3 toGoal = PhysicsHelper.DirectionXZ(transform.position, nearestGoal.position);
                 Gizmos.DrawRay(transform.position, toGoal * 5f);
             }
         }
@@ -425,7 +424,6 @@ public class ShootingController : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Unsubscribe from events
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnShootRequested -= HandleShootRequested;

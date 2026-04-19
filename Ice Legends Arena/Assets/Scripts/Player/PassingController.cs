@@ -2,20 +2,21 @@ using UnityEngine;
 
 /// <summary>
 /// Handles passing mechanics - basic pass, saucer pass, and one-timers.
+/// 3D physics: passes on XZ plane, saucer passes use real Y-axis arc with gravity.
 /// </summary>
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody))]
 public class PassingController : MonoBehaviour
 {
     [Header("Pass Power Settings")]
     [Tooltip("Power for basic tap pass")]
     [Range(5f, 30f)]
-    public float passPower = 20f; // Made public for CharacterStatsApplier (renamed from basicPassPower)
+    public float passPower = 20f; // Made public for CharacterStatsApplier
 
     [Tooltip("Power for saucer pass")]
     [Range(1.2f, 2.5f)]
-    public float saucerPassPower = 1.5f; // Made public for CharacterStatsApplier (renamed from saucerPassMultiplier)
+    public float saucerPassPower = 1.5f; // Made public for CharacterStatsApplier
 
-    [Tooltip("Vertical force for saucer pass arc")]
+    [Tooltip("Upward force for saucer pass arc (Y-axis lift)")]
     [Range(5f, 25f)]
     [SerializeField] private float saucerArcHeight = 12f;
 
@@ -57,25 +58,25 @@ public class PassingController : MonoBehaviour
     [SerializeField] private bool showPassDebug = true;
 
     // Component references
-    private Rigidbody2D playerRb;
+    private Rigidbody playerRb;
     private Transform puckTransform;
-    private Rigidbody2D puckRb;
+    private Rigidbody puckRb;
     private TimingMeter timingMeter;
 
     // State
-    private Vector2 lastMoveDirection = Vector2.right;
+    private Vector3 lastMoveDirection = Vector3.right;
     private bool isChargingSaucerPass = false;
     private Transform lastPassTarget = null;
     private float lastPassTime = -999f;
-    private float lastFakePassTime = -999f; // For cooldown tracking
-    private float fakePassCooldown = 3f; // 3 second cooldown between fakes
+    private float lastFakePassTime = -999f;
+    private float fakePassCooldown = 3f;
 
     // Public properties
     public bool IsChargingSaucerPass => isChargingSaucerPass;
 
     private void Awake()
     {
-        playerRb = GetComponent<Rigidbody2D>();
+        playerRb = GetComponent<Rigidbody>();
     }
 
     private void Start()
@@ -85,14 +86,14 @@ public class PassingController : MonoBehaviour
         if (puck != null)
         {
             puckTransform = puck.transform;
-            puckRb = puck.GetComponent<Rigidbody2D>();
+            puckRb = puck.GetComponent<Rigidbody>();
         }
         else
         {
             Debug.LogError("PassingController: No Puck found! Tag your puck with 'Puck' tag.");
         }
 
-        // Get or add TimingMeter component (shared with ShootingController)
+        // Get or add TimingMeter component
         timingMeter = GetComponent<TimingMeter>();
         if (timingMeter == null)
         {
@@ -106,7 +107,7 @@ public class PassingController : MonoBehaviour
         ContextButtonManager.Instance.OnPassChargeEnded += StopChargingSaucerPass;
         ContextButtonManager.Instance.OnFakePassRequested += HandleFakePassRequested;
         ContextButtonManager.Instance.OnShootRequested += HandleShootForOneTimer;
-        ContextButtonManager.Instance.OnCheckRequested += HandleCheckForOneTimer; // Also listen for CHECK button (in Defense mode)
+        ContextButtonManager.Instance.OnCheckRequested += HandleCheckForOneTimer;
     }
 
     private void Update()
@@ -114,7 +115,7 @@ public class PassingController : MonoBehaviour
         // Track movement direction for passing
         if (InputManager.Instance != null)
         {
-            Vector2 moveInput = InputManager.Instance.MoveInput;
+            Vector3 moveInput = PhysicsHelper.InputToWorld(InputManager.Instance.MoveInput);
             if (moveInput.magnitude > 0.1f)
             {
                 lastMoveDirection = moveInput.normalized;
@@ -138,53 +139,39 @@ public class PassingController : MonoBehaviour
 
         isChargingSaucerPass = false;
 
-        // Stop the timing meter and get result
         if (enableSaucerTiming && timingMeter != null)
         {
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             float powerMultiplier = timingMeter.GetPowerMultiplier(result);
-
-            // Execute saucer pass with timing multiplier
             ExecuteSaucerPass(powerMultiplier, result);
         }
     }
 
     private void HandlePassRequested(bool isCharged)
     {
-        // Tap = basic pass, Hold = saucer pass (handled by charge events)
         if (!isCharged && HasPossession())
         {
             ExecuteBasicPass();
         }
     }
 
-    /// <summary>
-    /// Handle fake pass request (swipe off)
-    /// </summary>
     private void HandleFakePassRequested()
     {
-        // Cancel any active saucer pass charging
         if (isChargingSaucerPass)
         {
             isChargingSaucerPass = false;
 
-            // Stop timing meter
             if (enableSaucerTiming && timingMeter != null)
             {
                 timingMeter.StopCharging();
             }
         }
 
-        // Execute fake pass
         ExecuteFakePass();
     }
 
-    /// <summary>
-    /// Execute fake pass - wind up without actually passing
-    /// </summary>
     private void ExecuteFakePass()
     {
-        // Check cooldown
         float timeSinceLastFake = Time.time - lastFakePassTime;
         if (timeSinceLastFake < fakePassCooldown)
         {
@@ -193,26 +180,19 @@ public class PassingController : MonoBehaviour
             return;
         }
 
-        // Wind-up motion: subtle movement in pass direction to sell the fake
-        Vector2 windUpDirection = lastMoveDirection.magnitude > 0.1f ? lastMoveDirection : Vector2.right;
+        Vector3 windUpDirection = lastMoveDirection.magnitude > 0.1f ? lastMoveDirection : Vector3.right;
+        windUpDirection = PhysicsHelper.FlattenY(windUpDirection).normalized;
 
-        // Apply subtle wind-up force (similar to fake check but in pass direction)
-        float windUpForce = 2.5f; // Subtle forward movement to sell the fake
+        float windUpForce = 2.5f;
         playerRb.linearVelocity += windUpDirection * windUpForce;
 
-        // Keep possession - don't touch the puck (that's the point of a fake!)
-
-        // Update cooldown
         lastFakePassTime = Time.time;
 
         Debug.Log($"FAKE PASS! Wind-up in direction {windUpDirection}. Cooldown: {fakePassCooldown}s");
-
-        // TODO: AI defenders will react to this (future feature)
     }
 
     private void HandleShootForOneTimer(bool isCharged)
     {
-        // Only trigger one-timer on tap (not charged shots)
         if (!isCharged && enableOneTimer)
         {
             TryArmOneTimer();
@@ -221,12 +201,9 @@ public class PassingController : MonoBehaviour
 
     private void HandleCheckForOneTimer(bool isCharged)
     {
-        // When player taps CHECK after passing (in Defense mode), try to arm one-timer instead
         if (!isCharged && enableOneTimer)
         {
             float timeSincePass = Time.time - lastPassTime;
-
-            // Only intercept CHECK taps if within one-timer window
             if (lastPassTarget != null && timeSincePass <= oneTimerWindow)
             {
                 TryArmOneTimer();
@@ -236,12 +213,10 @@ public class PassingController : MonoBehaviour
 
     private void TryArmOneTimer()
     {
-        // Check if within one-timer window after a pass
         float timeSincePass = Time.time - lastPassTime;
 
         if (lastPassTarget != null && timeSincePass <= oneTimerWindow)
         {
-            // Arm the teammate for a one-timer
             TeammateController teammate = lastPassTarget.GetComponent<TeammateController>();
             if (teammate != null)
             {
@@ -253,18 +228,20 @@ public class PassingController : MonoBehaviour
 
     private void ExecuteBasicPass()
     {
-        // Find nearest teammate
         Transform targetTeammate = FindNearestTeammate();
 
         if (targetTeammate != null)
         {
-            // Calculate direction to teammate
-            Vector2 passDirection = (targetTeammate.position - transform.position).normalized;
+            Vector3 passDirection = PhysicsHelper.DirectionXZ(transform.position, targetTeammate.position);
 
-            // Apply pass force to puck
             ApplyPassForce(passDirection, passPower);
 
-            // Track pass for one-timer setup
+            PlayerAnimator playerAnimator = GetComponent<PlayerAnimator>();
+            if (playerAnimator != null)
+            {
+                playerAnimator.TriggerPass();
+            }
+
             lastPassTarget = targetTeammate;
             lastPassTime = Time.time;
 
@@ -280,25 +257,21 @@ public class PassingController : MonoBehaviour
     {
         if (!HasPossession()) return;
 
-        // Find nearest teammate
         Transform targetTeammate = FindNearestTeammate();
 
         if (targetTeammate != null)
         {
-            // Calculate direction to teammate
-            Vector2 passDirection = (targetTeammate.position - transform.position).normalized;
+            Vector3 passDirection = PhysicsHelper.DirectionXZ(transform.position, targetTeammate.position);
 
-            // Calculate pass power with timing multiplier
             float basePower = passPower * saucerPassPower;
             float finalPower = basePower * powerMultiplier;
 
-            // Apply arc trajectory (horizontal + vertical)
+            // In 3D, saucer pass is simple: apply XZ force + upward Y force, gravity does the rest
             ApplySaucerPassForce(passDirection, finalPower);
 
             // Disable puck collision with players during flight
             StartCoroutine(DisablePlayerCollisionDuringFlight());
 
-            // Track pass for one-timer setup
             lastPassTarget = targetTeammate;
             lastPassTime = Time.time;
 
@@ -315,7 +288,6 @@ public class PassingController : MonoBehaviour
 
     private Transform FindNearestTeammate()
     {
-        // Find all GameObjects with TeammateController component
         TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
 
         Transform nearestTeammate = null;
@@ -323,23 +295,20 @@ public class PassingController : MonoBehaviour
 
         foreach (TeammateController teammate in teammates)
         {
-            // Skip if TeammateController is disabled (currently controlled player)
             if (!teammate.enabled || !teammate.isAI)
             {
                 continue;
             }
 
-            Vector2 toTeammate = teammate.transform.position - transform.position;
+            Vector3 toTeammate = teammate.transform.position - transform.position;
+            toTeammate.y = 0f; // Ignore height difference
             float distance = toTeammate.magnitude;
 
-            // Check if within max distance
             if (distance > maxPassDistance) continue;
 
-            // Check if within forward cone
-            float angle = Vector2.Angle(lastMoveDirection, toTeammate);
+            float angle = PhysicsHelper.AngleXZ(lastMoveDirection, toTeammate);
             if (angle > maxPassAngle) continue;
 
-            // Check if closer than current nearest
             if (distance < nearestDistance)
             {
                 nearestDistance = distance;
@@ -350,106 +319,74 @@ public class PassingController : MonoBehaviour
         return nearestTeammate;
     }
 
-    private void ApplyPassForce(Vector2 direction, float power)
+    private void ApplyPassForce(Vector3 direction, float power)
     {
         if (puckRb == null) return;
 
-        // Apply impulse force to puck
-        puckRb.linearVelocity = Vector2.zero; // Reset current velocity
-        puckRb.AddForce(direction * power, ForceMode2D.Impulse);
+        puckRb.linearVelocity = Vector3.zero;
+        Vector3 force = PhysicsHelper.FlattenY(direction).normalized * power;
+        puckRb.AddForce(force, ForceMode.Impulse);
     }
 
-    private void ApplySaucerPassForce(Vector2 direction, float power)
+    private void ApplySaucerPassForce(Vector3 direction, float power)
     {
         if (puckRb == null) return;
 
-        // Reset current velocity
-        puckRb.linearVelocity = Vector2.zero;
+        puckRb.linearVelocity = Vector3.zero;
 
-        // Apply horizontal force (toward teammate)
-        puckRb.AddForce(direction * power, ForceMode2D.Impulse);
-
-        // Apply vertical force for arc (perpendicular to direction)
-        // In 2D, we simulate "height" by moving the puck along an arc path
-        // Use a coroutine to apply upward then downward force over time
-        StartCoroutine(ApplyArcTrajectory(direction, power));
-    }
-
-    private System.Collections.IEnumerator ApplyArcTrajectory(Vector2 direction, float power)
-    {
-        float elapsed = 0f;
-        float arcDuration = 0.5f; // How long the arc takes
-
-        Vector2 perpendicular = new Vector2(-direction.y, direction.x); // Perpendicular to pass direction
-
-        while (elapsed < arcDuration)
-        {
-            elapsed += Time.deltaTime;
-            float normalizedTime = elapsed / arcDuration;
-
-            // Parabolic arc: up then down (using sin curve)
-            float arcForce = Mathf.Sin(normalizedTime * Mathf.PI) * saucerArcHeight;
-
-            // Apply arc force perpendicular to pass direction
-            if (puckRb != null)
-            {
-                puckRb.AddForce(perpendicular * arcForce * Time.deltaTime * 60f, ForceMode2D.Force);
-            }
-
-            yield return null;
-        }
+        // Real 3D saucer pass: horizontal force + upward Y lift, gravity brings it down naturally
+        Vector3 force = PhysicsHelper.FlattenY(direction).normalized * power;
+        force.y = saucerArcHeight; // Add upward lift
+        puckRb.AddForce(force, ForceMode.Impulse);
     }
 
     private System.Collections.IEnumerator DisablePlayerCollisionDuringFlight()
     {
-        // Find all players (including teammates) and disable collision with puck
         GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
         TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
 
-        Collider2D puckCollider = puckTransform?.GetComponent<Collider2D>();
+        Collider puckCollider = puckTransform?.GetComponent<Collider>();
         if (puckCollider == null) yield break;
 
         // Disable collision with all players
         foreach (GameObject player in players)
         {
-            Collider2D playerCollider = player.GetComponent<Collider2D>();
+            Collider playerCollider = player.GetComponent<Collider>();
             if (playerCollider != null)
             {
-                Physics2D.IgnoreCollision(puckCollider, playerCollider, true);
+                Physics.IgnoreCollision(puckCollider, playerCollider, true);
             }
         }
 
-        // Disable collision with all teammates
         foreach (TeammateController teammate in teammates)
         {
-            Collider2D teammateCollider = teammate.GetComponent<Collider2D>();
+            Collider teammateCollider = teammate.GetComponent<Collider>();
             if (teammateCollider != null)
             {
-                Physics2D.IgnoreCollision(puckCollider, teammateCollider, true);
+                Physics.IgnoreCollision(puckCollider, teammateCollider, true);
             }
         }
 
         Debug.Log($"Puck collision disabled for {saucerFlightDuration}s (saucer pass flight)");
 
-        // Wait for flight duration
         yield return new WaitForSeconds(saucerFlightDuration);
 
         // Re-enable collision
         foreach (GameObject player in players)
         {
-            Collider2D playerCollider = player.GetComponent<Collider2D>();
+            Collider playerCollider = player.GetComponent<Collider>();
             if (playerCollider != null)
             {
-                Physics2D.IgnoreCollision(puckCollider, playerCollider, false);
+                Physics.IgnoreCollision(puckCollider, playerCollider, false);
             }
         }
 
         foreach (TeammateController teammate in teammates)
         {
-            Collider2D teammateCollider = teammate.GetComponent<Collider2D>();
+            Collider teammateCollider = teammate.GetComponent<Collider>();
             if (teammateCollider != null)
             {
-                Physics2D.IgnoreCollision(puckCollider, teammateCollider, false);
+                Physics.IgnoreCollision(puckCollider, teammateCollider, false);
             }
         }
 
@@ -460,7 +397,7 @@ public class PassingController : MonoBehaviour
     {
         if (puckTransform == null) return false;
 
-        float distance = Vector2.Distance(transform.position, puckTransform.position);
+        float distance = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
         return distance <= possessionRadius;
     }
 
@@ -468,18 +405,14 @@ public class PassingController : MonoBehaviour
     {
         if (!showPassDebug) return;
 
-        // Draw possession radius
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(transform.position, possessionRadius);
 
-        // Draw pass cone
         if (Application.isPlaying)
         {
             Gizmos.color = Color.cyan;
-            Vector3 forward = lastMoveDirection * maxPassDistance;
-            Gizmos.DrawRay(transform.position, forward);
+            Gizmos.DrawRay(transform.position, lastMoveDirection * maxPassDistance);
 
-            // Draw nearest teammate connection
             Transform nearest = FindNearestTeammate();
             if (nearest != null)
             {
@@ -491,7 +424,6 @@ public class PassingController : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Unsubscribe from events
         if (ContextButtonManager.Instance != null)
         {
             ContextButtonManager.Instance.OnPassRequested -= HandlePassRequested;

@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Simulates hockey net physics - catches pucks and dramatically slows them down.
 /// Makes the puck behave like it's hitting netting instead of bouncing off solid walls.
+/// Converted to 3D physics (XZ plane, Y = height).
 /// </summary>
 public class NetPhysics : MonoBehaviour
 {
@@ -19,11 +20,11 @@ public class NetPhysics : MonoBehaviour
     [Range(0f, 3f)]
     [SerializeField] private float maxSpeedInNet = 0.5f;
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Puck"))
         {
-            Rigidbody2D puckRb = other.GetComponent<Rigidbody2D>();
+            Rigidbody puckRb = other.GetComponent<Rigidbody>();
             if (puckRb != null)
             {
                 // Immediately reduce velocity when entering net
@@ -33,11 +34,11 @@ public class NetPhysics : MonoBehaviour
         }
     }
 
-    private void OnTriggerStay2D(Collider2D other)
+    private void OnTriggerStay(Collider other)
     {
         if (other.CompareTag("Puck"))
         {
-            Rigidbody2D puckRb = other.GetComponent<Rigidbody2D>();
+            Rigidbody puckRb = other.GetComponent<Rigidbody>();
             if (puckRb != null)
             {
                 // Continuously slow down the puck
@@ -57,10 +58,10 @@ public class NetPhysics : MonoBehaviour
                 else
                 {
                     // Stop completely
-                    puckRb.linearVelocity = Vector2.zero;
+                    puckRb.linearVelocity = Vector3.zero;
                 }
 
-                // Also reduce angular velocity (spinning)
+                // Also reduce angular velocity (spinning) - Vector3 in 3D
                 puckRb.angularVelocity *= 0.95f;
             }
         }

@@ -17,6 +17,7 @@ public abstract class Ability : MonoBehaviour
 
     // Properties
     public AbilityData AbilityData => abilityData;
+    public string AbilityName => abilityData != null ? abilityData.abilityName : GetType().Name;
     public bool IsOnCooldown => isOnCooldown;
     public float CooldownRemaining => cooldownRemaining;
     public float CooldownProgress => abilityData != null ? (1f - (cooldownRemaining / abilityData.cooldown)) : 0f;
@@ -30,6 +31,25 @@ public abstract class Ability : MonoBehaviour
 
     public delegate void CooldownChangedDelegate(float cooldownRemaining, float cooldownProgress);
     public event CooldownChangedDelegate OnCooldownChanged;
+
+    protected virtual void Awake()
+    {
+        // Auto-load AbilityData from Resources if not assigned in Inspector
+        if (abilityData == null)
+        {
+            string abilityName = GetType().Name;
+            abilityData = Resources.Load<AbilityData>($"Abilities/{abilityName}");
+
+            if (abilityData != null)
+            {
+                Debug.Log($"Auto-loaded AbilityData for {abilityName}");
+            }
+            else
+            {
+                Debug.LogWarning($"Could not auto-load AbilityData for {abilityName}. Expected at Resources/Abilities/{abilityName}.asset");
+            }
+        }
+    }
 
     protected virtual void Update()
     {

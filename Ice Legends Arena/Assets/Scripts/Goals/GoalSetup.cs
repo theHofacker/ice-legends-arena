@@ -5,7 +5,8 @@ using UnityEditor;
 
 /// <summary>
 /// Sets up hockey goals at both ends of the rink with nets and scoring triggers.
-/// Creates goals positioned at the north and south ends with proper dimensions.
+/// Creates goals positioned at the east and west ends with proper dimensions.
+/// Converted to 3D physics (X = rink length, Z = rink width, Y = height).
 /// </summary>
 public class GoalSetup : MonoBehaviour
 {
@@ -16,9 +17,9 @@ public class GoalSetup : MonoBehaviour
         // Scale up goals for gameplay (real goals are too small for this scale)
         // Real international: 1.83m x 1.22m x 1.12m
         // Scaled up 3x for better gameplay with 0.5m puck
-        float goalWidth = 5.5f;     // Scaled up (was 1.83m)
-        float goalHeight = 3.66f;   // Scaled up (was 1.22m) - not used in 2D
-        float goalDepth = 3.5f;     // Scaled up (was 1.12m)
+        float goalWidth = 5.5f;     // Z-axis: opening width (was Y in 2D)
+        float goalHeight = 3.66f;   // Y-axis: height above ice
+        float goalDepth = 3.5f;     // X-axis: depth into the net
 
         // Rink dimensions (matching international 61m x 30m rink)
         float rinkLength = 61f;
@@ -40,7 +41,7 @@ public class GoalSetup : MonoBehaviour
             DestroyImmediate(goalsContainer.transform.GetChild(0).gameObject);
         }
 
-        // Create East and West goals (goals are at left and right ends)
+        // Create East and West goals (goals are at left and right ends along X)
         // West goal (left) = Player defends this = isPlayerGoal = true
         // East goal (right) = Opponent defends this = isPlayerGoal = false
         CreateGoal(goalsContainer.transform, "WestGoal", new Vector3(-goalXPosition, 0, 0), goalWidth, goalHeight, goalDepth, true);
@@ -77,8 +78,9 @@ public class GoalSetup : MonoBehaviour
         trigger.transform.localPosition = Vector3.zero;
 
         // Trigger zone is slightly inside the goal
-        BoxCollider2D triggerCollider = trigger.AddComponent<BoxCollider2D>();
-        triggerCollider.size = new Vector2(depth * 0.8f, width); // Slightly smaller depth
+        // X = depth, Z = width (opening), Y = height (generous for detection)
+        BoxCollider triggerCollider = trigger.AddComponent<BoxCollider>();
+        triggerCollider.size = new Vector3(depth * 0.8f, 2f, width); // Slightly smaller depth, generous Y height
         triggerCollider.isTrigger = true;
 
         // Add goal trigger script to detect scoring
@@ -94,8 +96,9 @@ public class GoalSetup : MonoBehaviour
         netZone.transform.localPosition = Vector3.zero;
 
         // Net zone covers the entire goal interior
-        BoxCollider2D netCollider = netZone.AddComponent<BoxCollider2D>();
-        netCollider.size = new Vector2(depth, width);
+        // X = depth, Z = width, Y = height (generous)
+        BoxCollider netCollider = netZone.AddComponent<BoxCollider>();
+        netCollider.size = new Vector3(depth, 2f, width);
         netCollider.isTrigger = true;
 
         // Add net physics script to slow down pucks
@@ -109,50 +112,54 @@ public class GoalSetup : MonoBehaviour
         frame.transform.localPosition = Vector3.zero;
 
         float postWidth = 0.4f; // Goal post thickness (increased for visibility)
-        float halfWidth = width / 2f;   // Y dimension (top/bottom)
+        float halfWidth = width / 2f;   // Z dimension (left/right of opening)
         float halfDepth = depth / 2f;   // X dimension (front/back)
 
-        // For East/West goals in top-down 2D:
+        // For East/West goals in 3D:
         // X-axis: goal depth (front to back)
-        // Y-axis: goal width (left side to right side of opening)
+        // Z-axis: goal width (left side to right side of opening)
+        // Y-axis: height (not used for post placement on ice)
 
         // Shift the entire goal frame back by half the depth to align with visual
         float frameOffset = -halfDepth * 0.6f; // Shift toward back of goal
 
-        // LEFT SIDE POST (bottom post) - runs along the depth of the goal
-        CreatePost(frame.transform, "LeftSidePost", new Vector2(frameOffset, -halfWidth - postWidth/2), new Vector2(depth + postWidth, postWidth), false, false);
+        // LEFT SIDE POST - runs along the depth of the goal (negative Z side)
+        CreatePost(frame.transform, "LeftSidePost",
+            new Vector3(frameOffset, 0, -halfWidth - postWidth / 2),
+            new Vector3(depth + postWidth, 1f, postWidth), false, false);
 
-        // RIGHT SIDE POST (top post) - runs along the depth of the goal
-        CreatePost(frame.transform, "RightSidePost", new Vector2(frameOffset, halfWidth + postWidth/2), new Vector2(depth + postWidth, postWidth), false, false);
+        // RIGHT SIDE POST - runs along the depth of the goal (positive Z side)
+        CreatePost(frame.transform, "RightSidePost",
+            new Vector3(frameOffset, 0, halfWidth + postWidth / 2),
+            new Vector3(depth + postWidth, 1f, postWidth), false, false);
 
         // BACK WALL - runs across the width at the back of the goal (absorbs pucks, no bounce)
-        CreatePost(frame.transform, "BackWall", new Vector2(-halfDepth + frameOffset - postWidth/2, 0), new Vector2(postWidth, width + postWidth * 2), false, true);
+        CreatePost(frame.transform, "BackWall",
+            new Vector3(-halfDepth + frameOffset - postWidth / 2, 0, 0),
+            new Vector3(postWidth, 1f, width + postWidth * 2), false, true);
 
         // FRONT opening barrier - blocks players but allows pucks through
         GameObject frontBarrier = new GameObject("FrontBarrier_PlayersOnly");
         frontBarrier.transform.SetParent(frame.transform);
-        frontBarrier.transform.localPosition = new Vector3(halfDepth + frameOffset + postWidth/2, 0, 0);
+        frontBarrier.transform.localPosition = new Vector3(halfDepth + frameOffset + postWidth / 2, 0, 0);
 
-        // Add Static Rigidbody2D
-        Rigidbody2D frontRb = frontBarrier.AddComponent<Rigidbody2D>();
-        frontRb.bodyType = RigidbodyType2D.Static;
+        // Add kinematic Rigidbody (replaces RigidbodyType2D.Static)
+        Rigidbody frontRb = frontBarrier.AddComponent<Rigidbody>();
+        frontRb.isKinematic = true;
 
-        // Add visual (semi-transparent yellow to distinguish from solid posts)
-        SpriteRenderer frontSprite = frontBarrier.AddComponent<SpriteRenderer>();
-        frontSprite.sprite = CreateSquareSprite();
-        frontSprite.color = new Color(1f, 1f, 0f, 0.4f); // Semi-transparent yellow
-        frontSprite.sortingOrder = 9;
-        frontBarrier.transform.localScale = new Vector3(postWidth, width, 1);
+        // TODO: Replace SpriteRenderer with 3D mesh for front barrier visual
+        // For now, use a simple cube scale for the collider
+        frontBarrier.transform.localScale = new Vector3(postWidth, 1f, width);
 
-        BoxCollider2D frontCollider = frontBarrier.AddComponent<BoxCollider2D>();
-        frontCollider.size = Vector2.one; // Size controlled by transform scale
+        BoxCollider frontCollider = frontBarrier.AddComponent<BoxCollider>();
+        frontCollider.size = Vector3.one; // Size controlled by transform scale
         frontCollider.isTrigger = true; // Make it a trigger so pucks pass through
 
         // Add script to block players but allow pucks
-        FrontBarrierTrigger barrierScript = frontBarrier.AddComponent<FrontBarrierTrigger>();
+        frontBarrier.AddComponent<FrontBarrierTrigger>();
     }
 
-    private static void CreatePost(Transform parent, string name, Vector2 position, Vector2 size, bool isPuckPassable, bool isBackWall = false)
+    private static void CreatePost(Transform parent, string name, Vector3 position, Vector3 size, bool isPuckPassable, bool isBackWall = false)
     {
         GameObject post = new GameObject(name);
         post.transform.SetParent(parent);
@@ -160,47 +167,44 @@ public class GoalSetup : MonoBehaviour
 
         Debug.Log($"Creating post '{name}' at position {position} with size {size}");
 
-        // Add Rigidbody2D set to Static so it interacts properly with dynamic objects
-        Rigidbody2D rb = post.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Static; // Static = immovable but participates in physics
+        // Add kinematic Rigidbody (replaces RigidbodyType2D.Static)
+        Rigidbody rb = post.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
 
-        // Add visual representation so we can see where posts are
-        SpriteRenderer sprite = post.AddComponent<SpriteRenderer>();
-        sprite.sprite = CreateSquareSprite();
-        sprite.color = new Color(0.8f, 0.1f, 0.1f, 1f); // Fully opaque red for better visibility
-        sprite.sortingOrder = 10;
-        post.transform.localScale = new Vector3(size.x, size.y, 1);
+        // TODO: Replace SpriteRenderer with 3D mesh for goal post visuals
+        // For now, set transform scale for collider sizing
+        post.transform.localScale = size;
 
-        // Add BoxCollider2D
-        BoxCollider2D collider = post.AddComponent<BoxCollider2D>();
-        collider.size = Vector2.one; // Size is 1x1 because we're scaling the transform
+        // Add BoxCollider
+        BoxCollider collider = post.AddComponent<BoxCollider>();
+        collider.size = Vector3.one; // Size is 1x1x1 because we're scaling the transform
         collider.enabled = true; // Explicitly enable
 
         Debug.Log($"Post '{name}' - Collider size: {collider.size}, Transform scale: {post.transform.localScale}, World position: {post.transform.position}");
 
         if (!isPuckPassable)
         {
-            PhysicsMaterial2D postMaterial = new PhysicsMaterial2D(isBackWall ? "BackWallMaterial" : "PostMaterial");
+            PhysicsMaterial postMaterial = new PhysicsMaterial(isBackWall ? "BackWallMaterial" : "PostMaterial");
             if (isBackWall)
             {
                 // Back wall absorbs shots - no bounce
-                postMaterial.friction = 0.5f;
+                postMaterial.dynamicFriction = 0.5f;
+                postMaterial.staticFriction = 0.5f;
                 postMaterial.bounciness = 0.0f; // Zero bounce - puck stops
+                postMaterial.frictionCombine = PhysicsMaterialCombine.Average;
+                postMaterial.bounceCombine = PhysicsMaterialCombine.Minimum;
             }
             else
             {
                 // Side posts - some bounce for realistic deflections
-                postMaterial.friction = 0.2f;
+                postMaterial.dynamicFriction = 0.2f;
+                postMaterial.staticFriction = 0.2f;
                 postMaterial.bounciness = 0.3f;
+                postMaterial.frictionCombine = PhysicsMaterialCombine.Average;
+                postMaterial.bounceCombine = PhysicsMaterialCombine.Average;
             }
             collider.sharedMaterial = postMaterial;
         }
-    }
-
-    private static Sprite CreateSquareSprite()
-    {
-        // Use the built-in white square sprite
-        return UnityEditor.AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd");
     }
 
     private static void CreateGoalVisuals(Transform parent, float width, float height, float depth, bool isPlayerGoal)
@@ -220,18 +224,18 @@ public class GoalSetup : MonoBehaviour
         lineRenderer.sortingOrder = 2;
         lineRenderer.numCapVertices = 5;
 
-        // Draw goal frame outline (top-down view)
-        // Rectangle showing goal opening (for East/West goals, width is along Y, depth along X)
+        // Draw goal frame outline (top-down view on XZ plane)
+        // Rectangle showing goal opening: X = depth, Z = width
         Vector3[] framePoints = new Vector3[5];
-        float halfWidth = width / 2f;   // Y dimension
+        float halfWidth = width / 2f;   // Z dimension
         float halfDepth = depth / 2f;   // X dimension
 
-        // Draw as a rectangle (goal mouth) - oriented for East/West goals
-        framePoints[0] = new Vector3(-halfDepth, -halfWidth, 0);   // Back-left
-        framePoints[1] = new Vector3(halfDepth, -halfWidth, 0);    // Front-left
-        framePoints[2] = new Vector3(halfDepth, halfWidth, 0);     // Front-right
-        framePoints[3] = new Vector3(-halfDepth, halfWidth, 0);    // Back-right
-        framePoints[4] = new Vector3(-halfDepth, -halfWidth, 0);   // Close the loop
+        // Draw as a rectangle (goal mouth) - oriented for East/West goals on XZ plane
+        framePoints[0] = new Vector3(-halfDepth, 0, -halfWidth);   // Back-left
+        framePoints[1] = new Vector3(halfDepth, 0, -halfWidth);    // Front-left
+        framePoints[2] = new Vector3(halfDepth, 0, halfWidth);     // Front-right
+        framePoints[3] = new Vector3(-halfDepth, 0, halfWidth);    // Back-right
+        framePoints[4] = new Vector3(-halfDepth, 0, -halfWidth);   // Close the loop
 
         lineRenderer.positionCount = framePoints.Length;
         lineRenderer.SetPositions(framePoints);
@@ -249,15 +253,15 @@ public class GoalSetup : MonoBehaviour
         net.transform.SetParent(parent);
         net.transform.localPosition = Vector3.zero;
 
-        float halfWidth = width / 2f;   // Y dimension
+        float halfWidth = width / 2f;   // Z dimension
         float halfDepth = depth / 2f;   // X dimension
 
-        // Create horizontal net lines (along X-axis / depth)
+        // Create horizontal net lines (along X-axis / depth, across Z width)
         int horizontalLines = 5;
         for (int i = 1; i < horizontalLines; i++)
         {
             float t = i / (float)horizontalLines;
-            float y = Mathf.Lerp(-halfWidth, halfWidth, t);
+            float z = Mathf.Lerp(-halfWidth, halfWidth, t);
 
             GameObject line = new GameObject($"NetLineH{i}");
             line.transform.SetParent(net.transform);
@@ -273,11 +277,11 @@ public class GoalSetup : MonoBehaviour
             lr.sortingOrder = 1;
 
             lr.positionCount = 2;
-            lr.SetPosition(0, new Vector3(-halfDepth, y, 0));
-            lr.SetPosition(1, new Vector3(halfDepth, y, 0));
+            lr.SetPosition(0, new Vector3(-halfDepth, 0, z));
+            lr.SetPosition(1, new Vector3(halfDepth, 0, z));
         }
 
-        // Create vertical net lines (along Y-axis / width)
+        // Create vertical net lines (along Z-axis / width, across X depth)
         int verticalLines = 4;
         for (int i = 1; i < verticalLines; i++)
         {
@@ -298,8 +302,8 @@ public class GoalSetup : MonoBehaviour
             lr.sortingOrder = 1;
 
             lr.positionCount = 2;
-            lr.SetPosition(0, new Vector3(x, -halfWidth, 0));
-            lr.SetPosition(1, new Vector3(x, halfWidth, 0));
+            lr.SetPosition(0, new Vector3(x, 0, -halfWidth));
+            lr.SetPosition(1, new Vector3(x, 0, halfWidth));
         }
     }
 
@@ -319,15 +323,15 @@ public class GoalSetup : MonoBehaviour
         lr.sortingOrder = 3;
         lr.numCapVertices = 5;
 
-        float halfWidth = width / 2f;  // Y dimension
+        float halfWidth = width / 2f;  // Z dimension
         // Goal line at the goal plane (4m from boards)
         // For West goal (left/player defends), line is at right side of goal (toward center)
         // For East goal (right/opponent defends), line is at left side of goal (toward center)
         float lineX = isPlayerGoal ? 0.5f : -0.5f;
 
         lr.positionCount = 2;
-        lr.SetPosition(0, new Vector3(lineX, -halfWidth, 0));
-        lr.SetPosition(1, new Vector3(lineX, halfWidth, 0));
+        lr.SetPosition(0, new Vector3(lineX, 0, -halfWidth));
+        lr.SetPosition(1, new Vector3(lineX, 0, halfWidth));
     }
 #endif
 }
