@@ -12,8 +12,8 @@ public class PuckController : MonoBehaviour
     [Range(0.5f, 3f)]
     [SerializeField] private float possessionRadius = 1.5f;
 
-    [Tooltip("Offset position from player when possessed (stick position)")]
-    [SerializeField] private Vector3 possessionOffset = new Vector3(0.5f, 0f, 0f);
+    [Tooltip("Offset distance from player center when possessed (stick position)")]
+    [SerializeField] private float possessionOffsetDistance = 2.0f;
 
     [Tooltip("How smoothly puck follows player")]
     [Range(1f, 50f)]
@@ -207,9 +207,9 @@ public class PuckController : MonoBehaviour
         Vector3 offsetDirection = lastPlayerDirection.magnitude > 0.1f ? lastPlayerDirection : Vector3.right;
         offsetDirection = PhysicsHelper.FlattenY(offsetDirection).normalized;
 
-        // Offset along facing direction on the XZ plane, keep puck on ice (Y=0)
-        Vector3 targetPosition = playerTransform.position + offsetDirection * possessionOffset.x;
-        targetPosition.y = transform.position.y; // Keep puck at current height (ice level)
+        // Offset along facing direction on the XZ plane, keep puck on ice
+        Vector3 targetPosition = playerTransform.position + offsetDirection * possessionOffsetDistance;
+        targetPosition.y = 0.05f; // Puck sits just above ice surface
 
         // Smoothly move puck to target position
         Vector3 newPosition = Vector3.Lerp(
@@ -394,7 +394,7 @@ public class PuckController : MonoBehaviour
         if (isPossessed && playerTransform != null)
         {
             Gizmos.color = Color.cyan;
-            Vector3 offsetPos = playerTransform.position + PhysicsHelper.FlattenY(lastPlayerDirection).normalized * possessionOffset.x;
+            Vector3 offsetPos = playerTransform.position + PhysicsHelper.FlattenY(lastPlayerDirection).normalized * possessionOffsetDistance;
             Gizmos.DrawLine(transform.position, offsetPos);
         }
     }

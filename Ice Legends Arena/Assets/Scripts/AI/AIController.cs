@@ -185,6 +185,14 @@ public class AIController : MonoBehaviour
 
         // Execute current state behavior
         ExecuteState();
+
+        // Safety: clamp to ice surface (prevents any Y drift from position assignments)
+        Vector3 pos = transform.position;
+        if (Mathf.Abs(pos.y) > 0.1f)
+        {
+            pos.y = 0f;
+            transform.position = pos;
+        }
     }
 
     /// <summary>
@@ -802,7 +810,7 @@ public class AIController : MonoBehaviour
         if (opponentFormation != null)
         {
             // Get formation position based on defensive system (Box +1, Sagging Zone, etc.)
-            defendPosition = PhysicsHelper.ToWorldPosition(opponentFormation.GetFormationPosition(playerRole));
+            defendPosition = opponentFormation.GetFormationPosition(playerRole);
         }
         else
         {
@@ -1036,7 +1044,7 @@ public class AIController : MonoBehaviour
         if (opponentFormation != null)
         {
             // Get formation position (could be offensive, defensive, or neutral)
-            targetPosition = PhysicsHelper.ToWorldPosition(opponentFormation.GetFormationPosition(playerRole));
+            targetPosition = opponentFormation.GetFormationPosition(playerRole);
         }
         else
         {

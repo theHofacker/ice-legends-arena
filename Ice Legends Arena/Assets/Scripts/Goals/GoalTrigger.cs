@@ -27,13 +27,40 @@ public class GoalTrigger : MonoBehaviour
 
     private void Awake()
     {
-        goalCollider = GetComponent<Collider>();
-
-        // Ensure collider is a trigger
-        if (!goalCollider.isTrigger)
+        // Find a trigger collider - prefer BoxCollider since MeshColliders can't be concave triggers
+        goalCollider = null;
+        foreach (Collider col in GetComponents<Collider>())
         {
-            goalCollider.isTrigger = true;
-            Debug.LogWarning($"{gameObject.name}: Collider was not set as trigger. Fixed automatically.");
+            if (col.isTrigger)
+            {
+                goalCollider = col;
+                break;
+            }
+            // Prefer BoxCollider over MeshCollider for trigger use
+            if (col is BoxCollider && goalCollider == null)
+            {
+                goalCollider = col;
+            }
+        }
+
+        // Fallback to first collider if none found
+        if (goalCollider == null)
+        {
+            goalCollider = GetComponent<Collider>();
+        }
+
+        // Set as trigger if not already (only if it's not a concave MeshCollider)
+        if (goalCollider != null && !goalCollider.isTrigger)
+        {
+            if (goalCollider is MeshCollider meshCol && !meshCol.convex)
+            {
+                Debug.LogWarning($"{gameObject.name}: MeshCollider is concave and can't be a trigger. Add a BoxCollider with Is Trigger = true instead.");
+            }
+            else
+            {
+                goalCollider.isTrigger = true;
+                Debug.LogWarning($"{gameObject.name}: Collider was not set as trigger. Fixed automatically.");
+            }
         }
 
         // Get or add AudioSource for goal horn

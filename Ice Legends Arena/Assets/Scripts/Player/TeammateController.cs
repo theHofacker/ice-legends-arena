@@ -119,6 +119,14 @@ public class TeammateController : MonoBehaviour
         {
             AIMovementBehavior();
         }
+
+        // Safety: clamp to ice surface (prevents any Y drift from position assignments)
+        Vector3 pos = transform.position;
+        if (Mathf.Abs(pos.y) > 0.1f)
+        {
+            pos.y = 0f;
+            transform.position = pos;
+        }
     }
 
     /// <summary>
@@ -146,7 +154,7 @@ public class TeammateController : MonoBehaviour
     private void FormationBasedMovement()
     {
         // Get target formation position from FormationManager
-        Vector3 formationPosition = PhysicsHelper.ToWorldPosition(FormationManager.Instance.GetFormationPosition(playerRole));
+        Vector3 formationPosition = FormationManager.Instance.GetFormationPosition(playerRole);
         float distanceToFormation = PhysicsHelper.DistanceXZ(transform.position, formationPosition);
         float distanceToPuck = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
@@ -449,7 +457,7 @@ public class TeammateController : MonoBehaviour
         // Draw formation position (if FormationManager exists)
         if (Application.isPlaying && FormationManager.Instance != null)
         {
-            Vector3 formationPos = PhysicsHelper.ToWorldPosition(FormationManager.Instance.GetFormationPosition(playerRole));
+            Vector3 formationPos = FormationManager.Instance.GetFormationPosition(playerRole);
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(formationPos, 0.5f);
             Gizmos.DrawLine(transform.position, formationPos);

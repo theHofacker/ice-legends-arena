@@ -130,18 +130,22 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void StoreInitialFaceOffPositions()
     {
-        // Store all player team positions
+        // Store all player team positions (flatten Y to ice surface)
         TeammateController[] teammates = FindObjectsByType<TeammateController>(FindObjectsSortMode.None);
         foreach (TeammateController teammate in teammates)
         {
-            initialPositions[teammate.gameObject] = teammate.transform.position;
+            Vector3 pos = teammate.transform.position;
+            pos.y = 0f; // Force to ice surface
+            initialPositions[teammate.gameObject] = pos;
         }
 
-        // Store all opponent team positions
+        // Store all opponent team positions (flatten Y to ice surface)
         AIController[] opponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
         foreach (AIController opponent in opponents)
         {
-            initialPositions[opponent.gameObject] = opponent.transform.position;
+            Vector3 pos = opponent.transform.position;
+            pos.y = 0f; // Force to ice surface
+            initialPositions[opponent.gameObject] = pos;
         }
 
         Debug.Log($"Stored face-off positions for {initialPositions.Count} players");

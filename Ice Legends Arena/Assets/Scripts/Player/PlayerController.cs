@@ -33,8 +33,9 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
 
-        // Validate Rigidbody settings
-        ValidateRigidbodySettings();
+        // Enforce correct physics settings for ice surface movement
+        rb.useGravity = false;
+        rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
     }
 
     private void Start()
@@ -102,24 +103,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Validates that Rigidbody is configured correctly for ice hockey physics
-    /// </summary>
-    private void ValidateRigidbodySettings()
-    {
-        if (rb.useGravity)
-        {
-            Debug.LogWarning($"PlayerController: Rigidbody useGravity should be false for ice surface movement. Current: {rb.useGravity}", this);
-        }
-
-        // Players should freeze Y position (stay on ice) and freeze all rotation (no tipping)
-        RigidbodyConstraints expectedConstraints = RigidbodyConstraints.FreezePositionY |
-                                                    RigidbodyConstraints.FreezeRotation;
-        if (rb.constraints != expectedConstraints)
-        {
-            Debug.LogWarning("PlayerController: Consider freezing Y position and all rotation for ice hockey", this);
-        }
-    }
 
     /// <summary>
     /// Draw debug gizmos to visualize player velocity
