@@ -31,7 +31,7 @@ public class ShootingController : MonoBehaviour
     [Header("Possession Settings")]
     [Tooltip("Distance to consider player 'has' the puck")]
     [Range(0.5f, 3f)]
-    [SerializeField] private float possessionRadius = 1.5f;
+    [SerializeField] private float possessionRadius = 3.0f;
 
     [Header("Aimed Shooting")]
     [Tooltip("Enable manual aiming with joystick during charge")]
@@ -93,6 +93,8 @@ public class ShootingController : MonoBehaviour
     private void Awake()
     {
         playerRb = GetComponent<Rigidbody>();
+        // Force possession radius (scene serialization may have old 2D values)
+        possessionRadius = 3.0f;
     }
 
     private void Start()
@@ -237,7 +239,13 @@ public class ShootingController : MonoBehaviour
     {
         if (!isCharged)
         {
-            if (HasPossession())
+            bool hasPuck = HasPossession();
+            if (!hasPuck)
+            {
+                float dist = puckTransform != null ? PhysicsHelper.DistanceXZ(transform.position, puckTransform.position) : -1f;
+                Debug.Log($"[Shoot] No possession! Distance to puck: {dist:F2}, required: {possessionRadius}");
+            }
+            if (hasPuck)
             {
                 ExecuteWristShot();
             }
@@ -339,6 +347,13 @@ public class ShootingController : MonoBehaviour
     private void ApplyShotForce(Vector3 direction, float power, bool isRoof)
     {
         if (puckRb == null) return;
+
+        // Signal puck to release possession
+        PuckController puckController = puckRb.GetComponent<PuckController>();
+        if (puckController != null)
+        {
+            puckController.SignalShotFired();
+        }
 
         // Check for Trick Shot modifier
         TrickShotModifier trickShot = GetComponent<TrickShotModifier>();

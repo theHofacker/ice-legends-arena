@@ -32,7 +32,7 @@ public class PassingController : MonoBehaviour
     [Header("Possession Settings")]
     [Tooltip("Distance to consider player 'has' the puck")]
     [Range(0.5f, 3f)]
-    [SerializeField] private float possessionRadius = 1.5f;
+    [SerializeField] private float possessionRadius = 3.0f;
 
     [Header("Saucer Pass Settings")]
     [Tooltip("Enable perfect timing for saucer passes")]
@@ -77,6 +77,8 @@ public class PassingController : MonoBehaviour
     private void Awake()
     {
         playerRb = GetComponent<Rigidbody>();
+        // Force possession radius (scene serialization may have old 2D values)
+        possessionRadius = 3.0f;
     }
 
     private void Start()
@@ -323,6 +325,13 @@ public class PassingController : MonoBehaviour
     {
         if (puckRb == null) return;
 
+        // Signal puck to release possession
+        PuckController puckController = puckRb.GetComponent<PuckController>();
+        if (puckController != null)
+        {
+            puckController.SignalShotFired();
+        }
+
         puckRb.linearVelocity = Vector3.zero;
         Vector3 force = PhysicsHelper.FlattenY(direction).normalized * power;
         puckRb.AddForce(force, ForceMode.Impulse);
@@ -331,6 +340,13 @@ public class PassingController : MonoBehaviour
     private void ApplySaucerPassForce(Vector3 direction, float power)
     {
         if (puckRb == null) return;
+
+        // Signal puck to release possession
+        PuckController puckController = puckRb.GetComponent<PuckController>();
+        if (puckController != null)
+        {
+            puckController.SignalShotFired();
+        }
 
         puckRb.linearVelocity = Vector3.zero;
 

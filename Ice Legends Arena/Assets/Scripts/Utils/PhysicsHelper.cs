@@ -8,10 +8,11 @@ public static class PhysicsHelper
 {
     /// <summary>
     /// Converts 2D joystick input (x,y) to 3D world direction (x, 0, z).
+    /// Z is negated so W/up moves toward positive Z (far boards) on screen.
     /// </summary>
     public static Vector3 InputToWorld(Vector2 input)
     {
-        return new Vector3(input.x, 0f, input.y);
+        return new Vector3(input.x, 0f, -input.y);
     }
 
     /// <summary>

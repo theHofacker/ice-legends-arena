@@ -9,11 +9,11 @@ public class PuckController : MonoBehaviour
 {
     [Header("Possession Settings")]
     [Tooltip("Distance to automatically possess puck")]
-    [Range(0.5f, 3f)]
-    [SerializeField] private float possessionRadius = 1.5f;
+    [Range(0.5f, 5f)]
+    [SerializeField] private float possessionRadius = 3.0f;
 
     [Tooltip("Offset distance from player center when possessed (stick position)")]
-    [SerializeField] private float possessionOffsetDistance = 2.0f;
+    [SerializeField] private float possessionOffsetDistance = 1.5f;
 
     [Tooltip("How smoothly puck follows player")]
     [Range(1f, 50f)]
@@ -32,8 +32,10 @@ public class PuckController : MonoBehaviour
 
     // State
     private bool isPossessed = false;
+    private bool shotFired = false; // Flag set by shooting/passing to release puck
     private Vector3 lastPlayerDirection = Vector3.right;
     private float timeSinceRelease = 0f;
+    private float repossessionCooldown = 0f; // Prevents instant re-possession after shot
     private bool collisionDisabledAfterShot = false;
     private bool wasOpponentPossessionLastFrame = false;
 
@@ -41,6 +43,27 @@ public class PuckController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         puckCollider = GetComponent<Collider>();
+
+        // Force possession values (scene serialization may have old 2D values)
+        possessionRadius = 3.0f;
+        possessionOffsetDistance = 1.5f;
+
+        // Ensure puck has proper physics settings
+        rb.useGravity = false; // Keep puck on ice, saucer passes add Y force directly
+        rb.linearDamping = 0.5f; // Low friction on ice
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+        // Ensure bouncy physics material so puck bounces off boards
+        if (puckCollider.sharedMaterial == null)
+        {
+            PhysicsMaterial puckMat = new PhysicsMaterial("PuckMaterial");
+            puckMat.bounciness = 0.6f;
+            puckMat.dynamicFriction = 0.1f;
+            puckMat.staticFriction = 0.1f;
+            puckMat.bounceCombine = PhysicsMaterialCombine.Maximum;
+            puckMat.frictionCombine = PhysicsMaterialCombine.Minimum;
+            puckCollider.sharedMaterial = puckMat;
+        }
     }
 
     private void Start()
@@ -60,6 +83,20 @@ public class PuckController : MonoBehaviour
 
         // Update player direction for possession offset
         UpdatePlayerDirection();
+
+        // Keep puck on ice surface - clamp Y and strip vertical velocity
+        Vector3 puckPos = transform.position;
+        if (puckPos.y < 0f || puckPos.y > 0.5f)
+        {
+            puckPos.y = 0.05f;
+            transform.position = puckPos;
+        }
+        // Always zero out Y velocity to keep puck sliding on ice
+        // (saucer passes will temporarily override this)
+        if (rb.linearVelocity.y != 0f)
+        {
+            rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        }
     }
 
     /// <summary>
@@ -119,6 +156,12 @@ public class PuckController : MonoBehaviour
     {
         float distance = PhysicsHelper.DistanceXZ(transform.position, playerTransform.position);
 
+        // Tick down repossession cooldown
+        if (repossessionCooldown > 0f)
+        {
+            repossessionCooldown -= Time.deltaTime;
+        }
+
         // Check if an OPPONENT has clearer possession than the controlled player
         bool opponentHasPuck = false;
 
@@ -160,9 +203,10 @@ public class PuckController : MonoBehaviour
         }
         wasOpponentPossessionLastFrame = opponentHasPuck;
 
-        // Auto-possess when close and puck is moving slowly (and opponent doesn't have it)
+        // Auto-possess when close, puck is slow, no cooldown active, and opponent doesn't have it
         bool canPossess = !isPossessed && distance <= possessionRadius &&
-                          PhysicsHelper.SpeedXZ(rb.linearVelocity) < releaseThreshold && !opponentHasPuck;
+                          PhysicsHelper.SpeedXZ(rb.linearVelocity) < releaseThreshold &&
+                          !opponentHasPuck && repossessionCooldown <= 0f;
 
         if (canPossess)
         {
@@ -177,12 +221,14 @@ public class PuckController : MonoBehaviour
             }
         }
 
-        // Release when puck moves fast (from shooting)
-        if (isPossessed && PhysicsHelper.SpeedXZ(rb.linearVelocity) > releaseThreshold)
+        // Release when a shot or pass is fired (flag set by ShootingController/PassingController)
+        if (isPossessed && shotFired)
         {
             isPossessed = false;
+            shotFired = false;
             collisionDisabledAfterShot = true;
             timeSinceRelease = 0f;
+            repossessionCooldown = 1.0f; // Can't re-possess for 1 second after shot
         }
 
         // Re-enable collision after short delay
@@ -330,6 +376,15 @@ public class PuckController : MonoBehaviour
     public bool IsPossessed()
     {
         return isPossessed;
+    }
+
+    /// <summary>
+    /// Signal that a shot or pass was fired - puck will be released next frame.
+    /// Called by ShootingController and PassingController after applying force.
+    /// </summary>
+    public void SignalShotFired()
+    {
+        shotFired = true;
     }
 
     /// <summary>

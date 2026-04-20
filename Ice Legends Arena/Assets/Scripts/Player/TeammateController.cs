@@ -183,6 +183,12 @@ public class TeammateController : MonoBehaviour
         {
             Vector3 directionToFormation = PhysicsHelper.DirectionXZ(transform.position, formationPosition);
             rb.linearVelocity = directionToFormation * aiMoveSpeed;
+
+            // Debug: log movement to diagnose frozen players
+            if (Time.frameCount % 120 == 0)
+            {
+                Debug.Log($"[Teammate] {gameObject.name}: vel={rb.linearVelocity:F2}, pos={transform.position:F2}, target={formationPosition:F2}, dist={distanceToFormation:F2}, constraints={rb.constraints}, isKinematic={rb.isKinematic}");
+            }
         }
         else
         {
