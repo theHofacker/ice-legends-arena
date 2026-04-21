@@ -15,7 +15,7 @@ public class ContextButtonManager : MonoBehaviour
     [SerializeField] private ContextButton button3; // Left-most button
 
     [Header("Possession Detection")]
-    [SerializeField] private float possessionCheckRadius = 1.5f; // How close player must be to puck to "have" it
+    [SerializeField] private float possessionCheckRadius = 3.0f; // How close player must be to puck to "have" it
     [SerializeField] private LayerMask puckLayer;
 
     // State tracking
@@ -58,6 +58,9 @@ public class ContextButtonManager : MonoBehaviour
         }
 
         Instance = this;
+
+        // Force possession radius for 3D scale (scene serialization may have old value)
+        possessionCheckRadius = 3.0f;
     }
 
     private void Start()
@@ -233,8 +236,8 @@ public class ContextButtonManager : MonoBehaviour
             return;
         }
 
-        // Check distance between player and puck
-        float distance = Vector2.Distance(playerTransform.position, puckTransform.position);
+        // Check distance between player and puck (XZ plane only, ignore height)
+        float distance = PhysicsHelper.DistanceXZ(playerTransform.position, puckTransform.position);
         HasPuck = distance <= possessionCheckRadius;
 
         // Update button context if state changed
