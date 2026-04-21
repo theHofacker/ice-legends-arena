@@ -21,7 +21,7 @@ public class TeammateController : MonoBehaviour
     [Header("AI Movement Settings")]
     [Tooltip("Speed when AI is moving")]
     [Range(1f, 10f)]
-    public float aiMoveSpeed = 3f;
+    public float aiMoveSpeed = 10f;
 
     [Tooltip("Distance to maintain from formation position")]
     [Range(1f, 5f)]
@@ -66,7 +66,7 @@ public class TeammateController : MonoBehaviour
         rb.isKinematic = false;
         rb.useGravity = false;
         rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
-        rb.linearDamping = 2f; // Some drag for realistic movement
+        rb.linearDamping = 0.5f; // Low damping for ice-like sliding
     }
 
     private void Start()
@@ -183,12 +183,6 @@ public class TeammateController : MonoBehaviour
         {
             Vector3 directionToFormation = PhysicsHelper.DirectionXZ(transform.position, formationPosition);
             rb.linearVelocity = directionToFormation * aiMoveSpeed;
-
-            // Debug: log movement to diagnose frozen players
-            if (Time.frameCount % 120 == 0)
-            {
-                Debug.Log($"[Teammate] {gameObject.name}: vel={rb.linearVelocity:F2}, pos={transform.position:F2}, target={formationPosition:F2}, dist={distanceToFormation:F2}, constraints={rb.constraints}, isKinematic={rb.isKinematic}");
-            }
         }
         else
         {

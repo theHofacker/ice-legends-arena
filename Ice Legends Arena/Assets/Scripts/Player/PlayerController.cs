@@ -10,8 +10,8 @@ public class PlayerController : MonoBehaviour
 {
     [Header("Movement Settings")]
     [Tooltip("Maximum movement speed in units per second")]
-    [Range(1f, 20f)]
-    public float moveSpeed = 5f; // Made public for CharacterStatsApplier
+    [Range(1f, 40f)]
+    public float moveSpeed = 12f; // Made public for CharacterStatsApplier
 
     [Tooltip("How quickly the player accelerates from rest")]
     [Range(0.1f, 30f)]
@@ -35,11 +35,10 @@ public class PlayerController : MonoBehaviour
 
         // Enforce correct physics settings for ice surface movement
         rb.useGravity = false;
+        rb.linearDamping = 0.5f; // Low damping for ice-like sliding
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
-
-        Debug.Log($"PlayerController.Awake on {gameObject.name}: constraints={rb.constraints} (expected 116), isKinematic={rb.isKinematic}");
     }
 
     private void Start()
@@ -94,12 +93,6 @@ public class PlayerController : MonoBehaviour
 
         // Apply the calculated velocity, keeping Y velocity for any vertical physics
         rb.linearVelocity = new Vector3(newVelocity.x, 0f, newVelocity.z);
-
-        // Debug: log every 60 frames to verify movement
-        if (Time.frameCount % 60 == 0 && moveInput.magnitude > 0.1f)
-        {
-            Debug.Log($"[PlayerController] {gameObject.name}: input={moveInput}, velocity={rb.linearVelocity}, pos={transform.position}, constraints={rb.constraints}");
-        }
 
         // Rotate model to face movement direction
         if (moveInput.magnitude > 0.1f)

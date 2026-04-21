@@ -57,7 +57,7 @@ public class OpponentController : MonoBehaviour
         rb.isKinematic = false;
         rb.useGravity = false;
         rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
-        rb.linearDamping = 2f;
+        rb.linearDamping = 0.5f;
     }
 
     private void Start()

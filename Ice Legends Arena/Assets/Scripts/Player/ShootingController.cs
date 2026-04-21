@@ -239,13 +239,7 @@ public class ShootingController : MonoBehaviour
     {
         if (!isCharged)
         {
-            bool hasPuck = HasPossession();
-            if (!hasPuck)
-            {
-                float dist = puckTransform != null ? PhysicsHelper.DistanceXZ(transform.position, puckTransform.position) : -1f;
-                Debug.Log($"[Shoot] No possession! Distance to puck: {dist:F2}, required: {possessionRadius}");
-            }
-            if (hasPuck)
+            if (HasPossession())
             {
                 ExecuteWristShot();
             }
