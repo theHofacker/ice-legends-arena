@@ -53,20 +53,22 @@ public static class PhysicsHelper
     }
 
     /// <summary>
-    /// Converts a 2D offset/position (x,y) from the old coordinate system to 3D (x, 0, z).
-    /// Use for FormationData offsets, old Vector2 positions, etc.
+    /// Converts a 2D offset/position (x,y) from the old coordinate system to 3D.
+    /// The arena rink is rotated 90° so rink length runs along Z, width along X.
+    /// Vector2.x (rink length) maps to Z, Vector2.y (rink width) maps to X.
     /// </summary>
     public static Vector3 ToWorldPosition(Vector2 oldPos)
     {
-        return new Vector3(oldPos.x, 0f, oldPos.y);
+        return new Vector3(oldPos.y, 0f, oldPos.x);
     }
 
     /// <summary>
-    /// Extracts XZ components as a Vector2 (for 2D-style calculations).
+    /// Extracts world position back to Vector2 formation space.
+    /// Reverse of ToWorldPosition: X (rink width) → Vector2.y, Z (rink length) → Vector2.x.
     /// </summary>
     public static Vector2 ToFlatVector(Vector3 worldPos)
     {
-        return new Vector2(worldPos.x, worldPos.z);
+        return new Vector2(worldPos.z, worldPos.x);
     }
 
     /// <summary>

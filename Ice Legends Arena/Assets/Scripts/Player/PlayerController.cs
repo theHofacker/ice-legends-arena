@@ -67,8 +67,8 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     private void HandleMovement()
     {
-        // Get input from InputManager and convert to world XZ direction
-        Vector3 moveInput = PhysicsHelper.InputToWorld(inputManager.MoveInput);
+        // Get input converted to world XZ direction
+        Vector3 worldDir = PhysicsHelper.InputToWorld(inputManager.MoveInput);
 
         // Apply movement multiplier if charging a shot
         float speedMultiplier = 1f;
@@ -77,13 +77,13 @@ public class PlayerController : MonoBehaviour
             speedMultiplier = shootingController.ChargingMovementMultiplier;
         }
 
-        // Calculate target velocity based on input direction and multiplier (XZ plane only)
-        Vector3 targetVelocity = moveInput * moveSpeed * speedMultiplier;
+        // Calculate target velocity based on world direction and multiplier
+        Vector3 targetVelocity = worldDir * moveSpeed * speedMultiplier;
 
         // Choose acceleration or deceleration based on input presence
-        float lerpRate = (moveInput.magnitude > 0.1f) ? acceleration : deceleration;
+        float lerpRate = (worldDir.magnitude > 0.1f) ? acceleration : deceleration;
 
-        // Smoothly interpolate current velocity toward target velocity (XZ only, preserve Y)
+        // Smoothly interpolate current velocity toward target velocity
         Vector3 currentVelocity = rb.linearVelocity;
         Vector3 newVelocity = Vector3.Lerp(
             new Vector3(currentVelocity.x, 0f, currentVelocity.z),
@@ -91,13 +91,12 @@ public class PlayerController : MonoBehaviour
             lerpRate * Time.fixedDeltaTime
         );
 
-        // Apply the calculated velocity, keeping Y velocity for any vertical physics
         rb.linearVelocity = new Vector3(newVelocity.x, 0f, newVelocity.z);
 
         // Rotate model to face movement direction
-        if (moveInput.magnitude > 0.1f)
+        if (worldDir.magnitude > 0.1f)
         {
-            float targetAngle = Mathf.Atan2(moveInput.x, moveInput.z) * Mathf.Rad2Deg;
+            float targetAngle = Mathf.Atan2(worldDir.x, worldDir.z) * Mathf.Rad2Deg;
             transform.rotation = Quaternion.Slerp(
                 transform.rotation,
                 Quaternion.Euler(0f, targetAngle, 0f),

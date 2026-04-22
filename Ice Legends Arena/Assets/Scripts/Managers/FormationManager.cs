@@ -518,9 +518,9 @@ public class FormationManager : MonoBehaviour
         else if (currentFormation == FormationType.Defensive)
         {
             // Defensive: Flip based on which goal we DEFEND
-            // Defensive offsets are designed for defending RIGHT goal (positive X)
-            // If defending LEFT goal (negative X), flip the offset
-            if (ownGoal != null && ownGoal.position.x < 0)
+            // Defensive offsets are designed for defending positive-Z goal
+            // If defending negative-Z goal, flip the rink-length component
+            if (ownGoal != null && ownGoal.position.z < 0)
             {
                 offset = new Vector2(-offset.x, offset.y);
             }
@@ -567,8 +567,8 @@ public class FormationManager : MonoBehaviour
         if (puckTransform == null || ownGoal == null) return baseOffset;
 
         // Determine strong-side (side where puck is) vs weak-side
-        // Z axis = rink width (was Y in 2D)
-        bool puckOnLeftSide = puckTransform.position.z > ownGoal.position.z;
+        // X axis = rink width (lateral), negative X = left side, positive X = right side
+        bool puckOnLeftSide = puckTransform.position.x < ownGoal.position.x;
         bool isStrongSide = (puckOnLeftSide && (role == PlayerRole.LeftWing || role == PlayerRole.LeftDefense)) ||
                             (!puckOnLeftSide && (role == PlayerRole.RightWing || role == PlayerRole.RightDefense));
 
@@ -679,38 +679,31 @@ public class FormationManager : MonoBehaviour
 
     /// <summary>
     /// Transform formation offset based on attack direction.
-    /// Formations are defined assuming attack toward RIGHT (positive X).
-    /// This method flips X component if attacking toward LEFT (negative X).
+    /// Formations are defined assuming attack toward positive rink-length.
+    /// This method flips the rink-length component (Vector2.x) if attacking
+    /// toward negative Z (since rink length runs along Z axis due to 90° rotation).
     /// Operates on Vector2 offsets (x = rink length, y = rink width).
     /// </summary>
     private Vector2 TransformOffsetForAttackDirection(Vector2 baseOffset)
     {
         if (playerGoal == null || ownGoal == null) return baseOffset;
 
-        // Determine attack direction (from own goal to opponent goal)
-        float attackDirectionX = playerGoal.position.x - ownGoal.position.x;
+        // Determine attack direction along Z (rink length axis)
+        float attackDirectionZ = playerGoal.position.z - ownGoal.position.z;
 
-        // TEMPORARY DEBUG
-        if (Time.frameCount % 240 == 0) // Log once every 4 seconds
-        {
-            Debug.Log($"[{team}] Transform: AttackGoal={playerGoal.position.x:F1}, OwnGoal={ownGoal.position.x:F1}, " +
-                     $"AttackDir={attackDirectionX:F1}, Flip={attackDirectionX < 0}");
-        }
-
-        // If attacking LEFT (negative X), flip the X component of offset
-        if (attackDirectionX < 0)
+        // If attacking toward negative Z, flip the rink-length component
+        if (attackDirectionZ < 0)
         {
             return new Vector2(-baseOffset.x, baseOffset.y);
         }
 
-        // If attacking RIGHT (positive X), use offset as-is
         return baseOffset;
     }
 
     /// <summary>
     /// Apply zone/lane constraints to keep players in realistic positions.
     /// Operates on Vector3 positions (XZ plane).
-    /// Z axis = rink width (was Y in 2D).
+    /// X axis = rink width (lateral spread), Z axis = rink length (goal-to-goal).
     /// </summary>
     private Vector3 ApplyZoneConstraints(Vector3 targetPosition, PlayerRole role)
     {
@@ -722,40 +715,39 @@ public class FormationManager : MonoBehaviour
         {
             case PlayerRole.LeftDefense:
             case PlayerRole.RightDefense:
-                // Defensemen: Can't push past certain distance from own goal (XZ plane)
+                // Defensemen: Can't push past certain distance from own goal
                 float distanceFromOwnGoal = PhysicsHelper.DistanceXZ(targetPosition, ownGoal.position);
                 if (distanceFromOwnGoal > defenseMaxPushDistance)
                 {
-                    // Clamp to max push distance
                     Vector3 directionFromGoal = PhysicsHelper.DirectionXZ(ownGoal.position, targetPosition);
                     constrainedPosition = ownGoal.position + directionFromGoal * defenseMaxPushDistance;
-                    constrainedPosition.y = 0f; // Keep on ice
+                    constrainedPosition.y = 0f;
                 }
 
-                // Also stay on their side (Z axis = rink width)
+                // Stay on their side (X axis = rink width / lateral)
                 if (role == PlayerRole.LeftDefense)
                 {
-                    constrainedPosition.z = Mathf.Max(constrainedPosition.z, 3f); // Stay positive Z
+                    constrainedPosition.x = Mathf.Min(constrainedPosition.x, -3f); // Stay negative X (left)
                 }
                 else // RightDefense
                 {
-                    constrainedPosition.z = Mathf.Min(constrainedPosition.z, -3f); // Stay negative Z
+                    constrainedPosition.x = Mathf.Max(constrainedPosition.x, 3f); // Stay positive X (right)
                 }
                 break;
 
             case PlayerRole.LeftWing:
-                // Left wing: Stay in positive Z lane (rink width)
-                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, wingLaneWidth, 100f);
+                // Left wing: Stay in negative X lane (left side of rink)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -100f, -wingLaneWidth);
                 break;
 
             case PlayerRole.RightWing:
-                // Right wing: Stay in negative Z lane (rink width)
-                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -100f, -wingLaneWidth);
+                // Right wing: Stay in positive X lane (right side of rink)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, wingLaneWidth, 100f);
                 break;
 
             case PlayerRole.Center:
-                // Center: Stay near center ice (don't drift too far on Z axis)
-                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -centerLaneWidth, centerLaneWidth);
+                // Center: Stay near center lane (don't drift too far laterally)
+                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -centerLaneWidth, centerLaneWidth);
                 break;
         }
 
