@@ -32,7 +32,7 @@ public class PlayerManager : MonoBehaviour
 
     [Header("Team Orientation")]
     [Tooltip("X position of own goal (negative = left side). Used to determine 'last defender'.")]
-    [SerializeField] private float ownGoalX = -25f;
+    [SerializeField] private float ownGoalX = 25f;
 
     // State
     private int currentPlayerIndex = 0;

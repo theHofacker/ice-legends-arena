@@ -188,17 +188,17 @@ public class FormationManager : MonoBehaviour
             // Assign goals based on team
             if (team == Team.Player)
             {
-                // Player team: Attack LEFT goal (west), Defend RIGHT goal (east)
-                playerGoal = leftGoal;  // Attack left
-                ownGoal = rightGoal;    // Defend right
-                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
-            }
-            else // Team.Opponent
-            {
-                // Opponent team: Attack RIGHT goal (east), Defend LEFT goal (west)
+                // Player team: Attack RIGHT goal (east), Defend LEFT goal (west)
                 playerGoal = rightGoal; // Attack right
                 ownGoal = leftGoal;     // Defend left
                 Debug.Log($"[{team}] FormationManager: Attack RIGHT goal (X:{playerGoal.position.x}), Defend LEFT goal (X:{ownGoal.position.x})");
+            }
+            else // Team.Opponent
+            {
+                // Opponent team: Attack LEFT goal (west), Defend RIGHT goal (east)
+                playerGoal = leftGoal;  // Attack left
+                ownGoal = rightGoal;    // Defend right
+                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
             }
         }
 
