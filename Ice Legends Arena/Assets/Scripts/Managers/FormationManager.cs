@@ -177,29 +177,42 @@ public class FormationManager : MonoBehaviour
             puckTransform = puck.transform;
         }
 
-        // Find goals and assign based on team
+        // Find goals using GoalTrigger.isPlayerGoal flag set in Inspector
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
-        if (goals.Length >= 2)
-        {
-            // Sort goals by X position (left to right)
-            Transform leftGoal = goals[0].transform.position.x < goals[1].transform.position.x ? goals[0].transform : goals[1].transform;
-            Transform rightGoal = goals[0].transform.position.x > goals[1].transform.position.x ? goals[0].transform : goals[1].transform;
+        Transform playerTeamGoal = null; // The goal the player team DEFENDS
+        Transform opponentTeamGoal = null; // The goal the opponent team DEFENDS
 
-            // Assign goals based on team
-            // hockey_arena_goal is at +X (right), hockey_arena_goal (1) is at -X (left)
-            // Player defends +X goal (right), attacks -X goal (left)
+        foreach (GameObject goal in goals)
+        {
+            GoalTrigger trigger = goal.GetComponent<GoalTrigger>();
+            if (trigger != null && trigger.IsPlayerGoal)
+            {
+                playerTeamGoal = goal.transform;
+            }
+            else
+            {
+                opponentTeamGoal = goal.transform;
+            }
+        }
+
+        // Assign goals based on team
+        if (playerTeamGoal != null && opponentTeamGoal != null)
+        {
             if (team == Team.Player)
             {
-                playerGoal = leftGoal;  // Attack left (-X)
-                ownGoal = rightGoal;    // Defend right (+X)
-                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
+                ownGoal = playerTeamGoal;       // Defend this goal
+                playerGoal = opponentTeamGoal;  // Attack this goal
             }
             else // Team.Opponent
             {
-                playerGoal = rightGoal; // Attack right (+X)
-                ownGoal = leftGoal;     // Defend left (-X)
-                Debug.Log($"[{team}] FormationManager: Attack RIGHT goal (X:{playerGoal.position.x}), Defend LEFT goal (X:{ownGoal.position.x})");
+                ownGoal = opponentTeamGoal;     // Defend this goal
+                playerGoal = playerTeamGoal;    // Attack this goal
             }
+            Debug.Log($"[{team}] FormationManager: Defend goal at {ownGoal.position}, Attack goal at {playerGoal.position}");
+        }
+        else
+        {
+            Debug.LogError($"[{team}] FormationManager: Could not find both goals! Found playerGoal={playerTeamGoal != null}, opponentGoal={opponentTeamGoal != null}. Tag both goals as 'Goal' and set IsPlayerGoal on one.");
         }
 
         // Initialize formation offsets with default values if not set
@@ -832,27 +845,19 @@ public class FormationManager : MonoBehaviour
     /// </summary>
     public Vector3 GetFaceOffPosition(PlayerRole role, Vector3 centerIcePosition)
     {
-        // Determine which side we're on based on which goal we defend
-        // If we defend right goal (positive X), we position to the RIGHT of center (positive X offset)
-        // If we defend left goal (negative X), we position to the LEFT of center (negative X offset)
-        bool defendingRightGoal = (ownGoal != null && ownGoal.position.x > 0);
+        // Determine direction toward own goal from center ice
+        // Goals are along Z axis (rink rotated 90°): own goal could be at +Z or -Z
+        float ownGoalZ = (ownGoal != null) ? ownGoal.position.z : 0f;
+        float dirSign = (ownGoalZ > 0) ? 1f : -1f; // +1 if defending +Z goal, -1 if defending -Z goal
 
-        // Face-off formation positions (relative to center ice)
-        // Players position themselves between center ice and their defensive goal
-        // X = rink length, Z = rink width (was Y in 2D)
+        // Face-off positions: Z = toward/away from own goal, X = lateral spread
         Vector3 offset = role switch
         {
-            // Center: at face-off circle (2m from center toward own goal)
-            PlayerRole.Center => new Vector3(defendingRightGoal ? 2f : -2f, 0f, 0f),
-
-            // Wings: on face-off dots (5m from center toward own goal, 8m on Z axis)
-            PlayerRole.LeftWing => new Vector3(defendingRightGoal ? 5f : -5f, 0f, 8f),
-            PlayerRole.RightWing => new Vector3(defendingRightGoal ? 5f : -5f, 0f, -8f),
-
-            // Defense: back from face-off (12m from center toward own goal, 6m on Z axis)
-            PlayerRole.LeftDefense => new Vector3(defendingRightGoal ? 12f : -12f, 0f, 6f),
-            PlayerRole.RightDefense => new Vector3(defendingRightGoal ? 12f : -12f, 0f, -6f),
-
+            PlayerRole.Center => new Vector3(0f, 0f, dirSign * 2f),
+            PlayerRole.LeftWing => new Vector3(-8f, 0f, dirSign * 5f),
+            PlayerRole.RightWing => new Vector3(8f, 0f, dirSign * 5f),
+            PlayerRole.LeftDefense => new Vector3(-6f, 0f, dirSign * 12f),
+            PlayerRole.RightDefense => new Vector3(6f, 0f, dirSign * 12f),
             _ => Vector3.zero
         };
 

@@ -112,20 +112,23 @@ public class ShootingController : MonoBehaviour
         }
 
         // Find opponent's goal (the one we shoot at)
-        // Player team defends +X goal, so we shoot at the -X goal (lowest X)
+        // Use GoalTrigger.IsPlayerGoal to identify - we shoot at the one that is NOT the player's goal
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
-        if (goals.Length >= 2)
+        foreach (GameObject goal in goals)
         {
-            // Pick the goal with the lowest X (opponent's goal for player team)
-            nearestGoal = goals[0].transform.position.x < goals[1].transform.position.x
-                ? goals[0].transform : goals[1].transform;
-            Debug.Log($"ShootingController: Aiming at goal: {nearestGoal.name} (X:{nearestGoal.position.x})");
+            GoalTrigger trigger = goal.GetComponent<GoalTrigger>();
+            if (trigger != null && !trigger.IsPlayerGoal)
+            {
+                nearestGoal = goal.transform;
+                Debug.Log($"ShootingController: Aiming at opponent goal: {nearestGoal.name} (pos:{nearestGoal.position})");
+                break;
+            }
         }
-        else if (goals.Length == 1)
+        if (nearestGoal == null && goals.Length > 0)
         {
-            nearestGoal = goals[0].transform;
+            nearestGoal = goals[0].transform; // Fallback
         }
-        else
+        if (nearestGoal == null)
         {
             Debug.LogWarning("ShootingController: No goals found. Auto-aim disabled.");
         }

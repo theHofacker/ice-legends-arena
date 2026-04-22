@@ -11,6 +11,7 @@ public class GoalTrigger : MonoBehaviour
     [Header("Goal Settings")]
     [Tooltip("Is this the player's goal (they defend it) or opponent's goal (they attack it)?")]
     [SerializeField] private bool isPlayerGoal = false;
+    public bool IsPlayerGoal => isPlayerGoal;
 
     [Header("Visual Feedback")]
     [Tooltip("Particle effect to spawn when goal is scored")]
