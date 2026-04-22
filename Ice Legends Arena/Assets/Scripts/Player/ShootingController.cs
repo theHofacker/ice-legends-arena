@@ -111,12 +111,19 @@ public class ShootingController : MonoBehaviour
             Debug.LogError("ShootingController: No Puck found! Tag your puck with 'Puck' tag.");
         }
 
-        // Find nearest goal
+        // Find opponent's goal (the one we shoot at)
+        // Player team defends +X goal, so we shoot at the -X goal (lowest X)
         GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
-        if (goals.Length > 0)
+        if (goals.Length >= 2)
+        {
+            // Pick the goal with the lowest X (opponent's goal for player team)
+            nearestGoal = goals[0].transform.position.x < goals[1].transform.position.x
+                ? goals[0].transform : goals[1].transform;
+            Debug.Log($"ShootingController: Aiming at goal: {nearestGoal.name} (X:{nearestGoal.position.x})");
+        }
+        else if (goals.Length == 1)
         {
             nearestGoal = goals[0].transform;
-            Debug.Log($"ShootingController: Aiming at goal: {nearestGoal.name}");
         }
         else
         {

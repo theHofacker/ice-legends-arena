@@ -186,19 +186,19 @@ public class FormationManager : MonoBehaviour
             Transform rightGoal = goals[0].transform.position.x > goals[1].transform.position.x ? goals[0].transform : goals[1].transform;
 
             // Assign goals based on team
+            // hockey_arena_goal is at +X (right), hockey_arena_goal (1) is at -X (left)
+            // Player defends +X goal (right), attacks -X goal (left)
             if (team == Team.Player)
             {
-                // Player team: Attack RIGHT goal (east), Defend LEFT goal (west)
-                playerGoal = rightGoal; // Attack right
-                ownGoal = leftGoal;     // Defend left
-                Debug.Log($"[{team}] FormationManager: Attack RIGHT goal (X:{playerGoal.position.x}), Defend LEFT goal (X:{ownGoal.position.x})");
+                playerGoal = leftGoal;  // Attack left (-X)
+                ownGoal = rightGoal;    // Defend right (+X)
+                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
             }
             else // Team.Opponent
             {
-                // Opponent team: Attack LEFT goal (west), Defend RIGHT goal (east)
-                playerGoal = leftGoal;  // Attack left
-                ownGoal = rightGoal;    // Defend right
-                Debug.Log($"[{team}] FormationManager: Attack LEFT goal (X:{playerGoal.position.x}), Defend RIGHT goal (X:{ownGoal.position.x})");
+                playerGoal = rightGoal; // Attack right (+X)
+                ownGoal = leftGoal;     // Defend left (-X)
+                Debug.Log($"[{team}] FormationManager: Attack RIGHT goal (X:{playerGoal.position.x}), Defend LEFT goal (X:{ownGoal.position.x})");
             }
         }
 
