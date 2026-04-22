@@ -8,11 +8,11 @@ public static class PhysicsHelper
 {
     /// <summary>
     /// Converts 2D joystick input (x,y) to 3D world direction (x, 0, z).
-    /// Both axes negated to match camera orientation (broadcast from -Z side).
+    /// May need negation depending on camera orientation - test and adjust.
     /// </summary>
     public static Vector3 InputToWorld(Vector2 input)
     {
-        return new Vector3(-input.x, 0f, -input.y);
+        return new Vector3(input.x, 0f, input.y);
     }
 
     /// <summary>
@@ -54,21 +54,19 @@ public static class PhysicsHelper
 
     /// <summary>
     /// Converts a 2D offset/position (x,y) from the old coordinate system to 3D.
-    /// The arena rink is rotated 90° so rink length runs along Z, width along X.
-    /// Vector2.x (rink length) maps to Z, Vector2.y (rink width) maps to X.
+    /// X = rink length (goal-to-goal), Z = rink width (boards-to-boards).
     /// </summary>
     public static Vector3 ToWorldPosition(Vector2 oldPos)
     {
-        return new Vector3(oldPos.y, 0f, oldPos.x);
+        return new Vector3(oldPos.x, 0f, oldPos.y);
     }
 
     /// <summary>
-    /// Extracts world position back to Vector2 formation space.
-    /// Reverse of ToWorldPosition: X (rink width) → Vector2.y, Z (rink length) → Vector2.x.
+    /// Extracts XZ components as a Vector2 (reverse of ToWorldPosition).
     /// </summary>
     public static Vector2 ToFlatVector(Vector3 worldPos)
     {
-        return new Vector2(worldPos.z, worldPos.x);
+        return new Vector2(worldPos.x, worldPos.z);
     }
 
     /// <summary>

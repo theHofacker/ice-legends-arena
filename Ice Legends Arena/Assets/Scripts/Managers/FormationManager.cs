@@ -518,9 +518,9 @@ public class FormationManager : MonoBehaviour
         else if (currentFormation == FormationType.Defensive)
         {
             // Defensive: Flip based on which goal we DEFEND
-            // Defensive offsets are designed for defending positive-Z goal
-            // If defending negative-Z goal, flip the rink-length component
-            if (ownGoal != null && ownGoal.position.z < 0)
+            // Defensive offsets are designed for defending positive-X goal
+            // If defending negative-X goal, flip the rink-length component
+            if (ownGoal != null && ownGoal.position.x < 0)
             {
                 offset = new Vector2(-offset.x, offset.y);
             }
@@ -567,8 +567,8 @@ public class FormationManager : MonoBehaviour
         if (puckTransform == null || ownGoal == null) return baseOffset;
 
         // Determine strong-side (side where puck is) vs weak-side
-        // X axis = rink width (lateral), negative X = left side, positive X = right side
-        bool puckOnLeftSide = puckTransform.position.x < ownGoal.position.x;
+        // Z axis = rink width, positive Z = left side, negative Z = right side
+        bool puckOnLeftSide = puckTransform.position.z > ownGoal.position.z;
         bool isStrongSide = (puckOnLeftSide && (role == PlayerRole.LeftWing || role == PlayerRole.LeftDefense)) ||
                             (!puckOnLeftSide && (role == PlayerRole.RightWing || role == PlayerRole.RightDefense));
 
@@ -688,11 +688,11 @@ public class FormationManager : MonoBehaviour
     {
         if (playerGoal == null || ownGoal == null) return baseOffset;
 
-        // Determine attack direction along Z (rink length axis)
-        float attackDirectionZ = playerGoal.position.z - ownGoal.position.z;
+        // Determine attack direction along X (rink length axis)
+        float attackDirectionX = playerGoal.position.x - ownGoal.position.x;
 
-        // If attacking toward negative Z, flip the rink-length component
-        if (attackDirectionZ < 0)
+        // If attacking toward negative X, flip the rink-length component
+        if (attackDirectionX < 0)
         {
             return new Vector2(-baseOffset.x, baseOffset.y);
         }
@@ -702,8 +702,7 @@ public class FormationManager : MonoBehaviour
 
     /// <summary>
     /// Apply zone/lane constraints to keep players in realistic positions.
-    /// Operates on Vector3 positions (XZ plane).
-    /// X axis = rink width (lateral spread), Z axis = rink length (goal-to-goal).
+    /// X = rink length (goal-to-goal), Z = rink width (boards-to-boards).
     /// </summary>
     private Vector3 ApplyZoneConstraints(Vector3 targetPosition, PlayerRole role)
     {
@@ -715,7 +714,6 @@ public class FormationManager : MonoBehaviour
         {
             case PlayerRole.LeftDefense:
             case PlayerRole.RightDefense:
-                // Defensemen: Can't push past certain distance from own goal
                 float distanceFromOwnGoal = PhysicsHelper.DistanceXZ(targetPosition, ownGoal.position);
                 if (distanceFromOwnGoal > defenseMaxPushDistance)
                 {
@@ -724,30 +722,27 @@ public class FormationManager : MonoBehaviour
                     constrainedPosition.y = 0f;
                 }
 
-                // Stay on their side (X axis = rink width / lateral)
+                // Stay on their side (Z = rink width)
                 if (role == PlayerRole.LeftDefense)
                 {
-                    constrainedPosition.x = Mathf.Min(constrainedPosition.x, -3f); // Stay negative X (left)
+                    constrainedPosition.z = Mathf.Max(constrainedPosition.z, 3f);
                 }
-                else // RightDefense
+                else
                 {
-                    constrainedPosition.x = Mathf.Max(constrainedPosition.x, 3f); // Stay positive X (right)
+                    constrainedPosition.z = Mathf.Min(constrainedPosition.z, -3f);
                 }
                 break;
 
             case PlayerRole.LeftWing:
-                // Left wing: Stay in negative X lane (left side of rink)
-                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -100f, -wingLaneWidth);
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, wingLaneWidth, 100f);
                 break;
 
             case PlayerRole.RightWing:
-                // Right wing: Stay in positive X lane (right side of rink)
-                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, wingLaneWidth, 100f);
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -100f, -wingLaneWidth);
                 break;
 
             case PlayerRole.Center:
-                // Center: Stay near center lane (don't drift too far laterally)
-                constrainedPosition.x = Mathf.Clamp(constrainedPosition.x, -centerLaneWidth, centerLaneWidth);
+                constrainedPosition.z = Mathf.Clamp(constrainedPosition.z, -centerLaneWidth, centerLaneWidth);
                 break;
         }
 
@@ -838,18 +833,18 @@ public class FormationManager : MonoBehaviour
     public Vector3 GetFaceOffPosition(PlayerRole role, Vector3 centerIcePosition)
     {
         // Determine direction toward own goal from center ice
-        // Goals are along Z axis (rink rotated 90°): own goal could be at +Z or -Z
-        float ownGoalZ = (ownGoal != null) ? ownGoal.position.z : 0f;
-        float dirSign = (ownGoalZ > 0) ? 1f : -1f; // +1 if defending +Z goal, -1 if defending -Z goal
+        // X = rink length, goals at +X and -X
+        float ownGoalX = (ownGoal != null) ? ownGoal.position.x : 0f;
+        float dirSign = (ownGoalX > 0) ? 1f : -1f;
 
-        // Face-off positions: Z = toward/away from own goal, X = lateral spread
+        // Face-off positions: X = toward/away from own goal, Z = lateral spread
         Vector3 offset = role switch
         {
-            PlayerRole.Center => new Vector3(0f, 0f, dirSign * 2f),
-            PlayerRole.LeftWing => new Vector3(-8f, 0f, dirSign * 5f),
-            PlayerRole.RightWing => new Vector3(8f, 0f, dirSign * 5f),
-            PlayerRole.LeftDefense => new Vector3(-6f, 0f, dirSign * 12f),
-            PlayerRole.RightDefense => new Vector3(6f, 0f, dirSign * 12f),
+            PlayerRole.Center => new Vector3(dirSign * 2f, 0f, 0f),
+            PlayerRole.LeftWing => new Vector3(dirSign * 5f, 0f, 8f),
+            PlayerRole.RightWing => new Vector3(dirSign * 5f, 0f, -8f),
+            PlayerRole.LeftDefense => new Vector3(dirSign * 12f, 0f, 6f),
+            PlayerRole.RightDefense => new Vector3(dirSign * 12f, 0f, -6f),
             _ => Vector3.zero
         };
 
