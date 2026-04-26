@@ -11,13 +11,15 @@ public class TestPlayerController : MonoBehaviour
 {
     [Header("Movement")]
     [Range(1f, 30f)]
-    public float moveSpeed = 12f;
+    public float moveSpeed = 14f;
 
-    [Range(1f, 30f)]
-    public float acceleration = 15f;
+    [Tooltip("How quickly player reaches top speed (original 2D: 10)")]
+    [Range(0.1f, 30f)]
+    public float acceleration = 10f;
 
-    [Range(1f, 30f)]
-    public float deceleration = 20f;
+    [Tooltip("How quickly player stops after releasing input (lower = more glide)")]
+    [Range(0.1f, 30f)]
+    public float deceleration = 0.8f;
 
     [Header("Rotation")]
     [Range(1f, 20f)]
@@ -34,12 +36,26 @@ public class TestPlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
 
         // Physics setup for ice surface
+        // Original 2D had linearDamping = 0! All sliding was from Lerp deceleration only.
         rb.useGravity = false;
-        rb.linearDamping = 0.5f;
+        rb.linearDamping = 0f; // ZERO - matches original 2D. Deceleration Lerp handles stopping.
         rb.angularDamping = 0.05f;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
+
+        // Apply slippery ice material to player collider
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+        if (capsule != null && capsule.sharedMaterial == null)
+        {
+            PhysicsMaterial iceMat = new PhysicsMaterial("PlayerIceMat");
+            iceMat.dynamicFriction = 0.02f;  // Nearly frictionless
+            iceMat.staticFriction = 0.02f;
+            iceMat.bounciness = 0f;
+            iceMat.frictionCombine = PhysicsMaterialCombine.Minimum; // Use lowest friction of the two surfaces
+            iceMat.bounceCombine = PhysicsMaterialCombine.Minimum;
+            capsule.sharedMaterial = iceMat;
+        }
     }
 
     private void Start()

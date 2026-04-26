@@ -1,9 +1,10 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Simplified puck controller for testing possession, following, and shooting.
 /// No dependencies on teams, opponents, formations, or context buttons.
-/// Uses keyboard shortcuts: Space = shoot, F = pass forward.
+/// Uses keyboard shortcuts: Space = shoot.
 /// Rink: X = width, Z = length (goal-to-goal), Y = height.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
@@ -126,8 +127,8 @@ public class TestPuckController : MonoBehaviour
                 Physics.IgnoreCollision(puckCollider, playerCol, true);
         }
 
-        // Shoot: Space key
-        if (isPossessed && Input.GetKeyDown(KeyCode.Space))
+        // Shoot: Space key (New Input System)
+        if (isPossessed && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
         {
             Shoot();
         }
