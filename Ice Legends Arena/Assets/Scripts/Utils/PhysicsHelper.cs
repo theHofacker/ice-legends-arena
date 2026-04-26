@@ -7,8 +7,11 @@ using UnityEngine;
 public static class PhysicsHelper
 {
     /// <summary>
-    /// Converts 2D joystick input (x,y) to 3D world direction (x, 0, z).
-    /// May need negation depending on camera orientation - test and adjust.
+    /// Converts 2D joystick input (x,y) to 3D world direction.
+    /// Rink: X = width (left/right), Z = length (goal-to-goal).
+    /// Camera is at negative Z looking toward +Z, so:
+    ///   Joystick right (input.x +) = world +X (right on screen)
+    ///   Joystick up (input.y +) = world +Z (away from camera = up on screen)
     /// </summary>
     public static Vector3 InputToWorld(Vector2 input)
     {
@@ -53,20 +56,23 @@ public static class PhysicsHelper
     }
 
     /// <summary>
-    /// Converts a 2D offset/position (x,y) from the old coordinate system to 3D.
-    /// X = rink length (goal-to-goal), Z = rink width (boards-to-boards).
+    /// Converts a 2D formation offset (x,y) to 3D world position.
+    /// In formation data: x = rink length offset, y = rink width offset.
+    /// In world: Z = rink length, X = rink width.
+    /// So: Vector2(length, width) → Vector3(width, 0, length).
     /// </summary>
     public static Vector3 ToWorldPosition(Vector2 oldPos)
     {
-        return new Vector3(oldPos.x, 0f, oldPos.y);
+        return new Vector3(oldPos.y, 0f, oldPos.x);
     }
 
     /// <summary>
-    /// Extracts XZ components as a Vector2 (reverse of ToWorldPosition).
+    /// Reverse of ToWorldPosition: world Vector3 → formation Vector2.
+    /// World X (width) → Vector2.y, World Z (length) → Vector2.x.
     /// </summary>
     public static Vector2 ToFlatVector(Vector3 worldPos)
     {
-        return new Vector2(worldPos.x, worldPos.z);
+        return new Vector2(worldPos.z, worldPos.x);
     }
 
     /// <summary>
