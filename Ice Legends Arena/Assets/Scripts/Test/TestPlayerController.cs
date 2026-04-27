@@ -25,11 +25,20 @@ public class TestPlayerController : MonoBehaviour
     [Range(1f, 20f)]
     public float rotationSpeed = 10f;
 
+    [Header("Animation")]
+    [Tooltip("Auto-finds Animator in children if empty")]
+    public Animator animator;
+
     [Header("Debug")]
     public bool logInput = false;
 
     private Rigidbody rb;
     private InputManager inputManager;
+
+    // Animator hashes
+    private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int ShootHash = Animator.StringToHash("Shoot");
+    private static readonly int BodyCheckHash = Animator.StringToHash("BodyCheck");
 
     private void Awake()
     {
@@ -65,6 +74,18 @@ public class TestPlayerController : MonoBehaviour
         {
             Debug.LogError("TestPlayerController: No InputManager found!");
         }
+
+        // Auto-find animator in children (Y Bot model)
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+        if (animator != null)
+        {
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; // Prevent culling from stopping animation
+            Debug.Log($"TestPlayerController: Found animator on {animator.gameObject.name}");
+        }
     }
 
     private void FixedUpdate()
@@ -99,6 +120,13 @@ public class TestPlayerController : MonoBehaviour
             float angle = Mathf.Atan2(worldDir.x, worldDir.z) * Mathf.Rad2Deg;
             Quaternion target = Quaternion.Euler(0f, angle, 0f);
             transform.rotation = Quaternion.Slerp(transform.rotation, target, rotationSpeed * Time.fixedDeltaTime);
+        }
+
+        // Update animation speed parameter
+        if (animator != null)
+        {
+            float speed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
+            animator.SetFloat(SpeedHash, speed);
         }
 
         // Safety: keep on ice

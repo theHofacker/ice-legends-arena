@@ -187,6 +187,13 @@ public class TestPuckController : MonoBehaviour
         rb.linearVelocity = Vector3.zero;
         rb.AddForce(shotDir * shotPower, ForceMode.Impulse);
 
+        // Trigger shoot animation on player
+        TestPlayerController player = playerTransform.GetComponent<TestPlayerController>();
+        if (player != null && player.animator != null)
+        {
+            player.animator.SetTrigger("Shoot");
+        }
+
         Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower}");
     }
 
