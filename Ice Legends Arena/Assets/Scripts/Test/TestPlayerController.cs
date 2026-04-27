@@ -1,9 +1,11 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Simplified player controller for testing basic 3D movement.
 /// No dependencies on formations, teams, abilities, or other systems.
 /// Rink coordinate system: X = width (left/right), Z = length (goal-to-goal), Y = height.
+/// Controls: WASD = move, Space = shoot (handled by TestPuckController), F = body check.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(CapsuleCollider))]
@@ -25,6 +27,16 @@ public class TestPlayerController : MonoBehaviour
     [Range(1f, 20f)]
     public float rotationSpeed = 10f;
 
+    [Header("Body Check")]
+    [Range(1f, 5f)]
+    public float checkRange = 2.5f;
+
+    [Range(5f, 30f)]
+    public float checkForce = 20f;
+
+    [Range(0.5f, 3f)]
+    public float checkCooldown = 1f;
+
     [Header("Animation")]
     [Tooltip("Auto-finds Animator in children if empty")]
     public Animator animator;
@@ -34,6 +46,7 @@ public class TestPlayerController : MonoBehaviour
 
     private Rigidbody rb;
     private InputManager inputManager;
+    private float checkTimer = 0f;
 
     // Animator hashes
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
@@ -122,6 +135,13 @@ public class TestPlayerController : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, target, rotationSpeed * Time.fixedDeltaTime);
         }
 
+        // Body check: F key
+        if (checkTimer > 0f) checkTimer -= Time.fixedDeltaTime;
+        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame && checkTimer <= 0f)
+        {
+            TryBodyCheck();
+        }
+
         // Update animation speed parameter
         if (animator != null)
         {
@@ -136,6 +156,31 @@ public class TestPlayerController : MonoBehaviour
             pos.y = 0f;
             transform.position = pos;
         }
+    }
+
+    private void TryBodyCheck()
+    {
+        checkTimer = checkCooldown;
+
+        // Trigger animation
+        if (animator != null)
+            animator.SetTrigger(BodyCheckHash);
+
+        // Find nearby opponents
+        Collider[] hits = Physics.OverlapSphere(transform.position, checkRange);
+        foreach (Collider hit in hits)
+        {
+            TestOpponentController opponent = hit.GetComponent<TestOpponentController>();
+            if (opponent != null)
+            {
+                Vector3 knockDir = PhysicsHelper.DirectionXZ(transform.position, opponent.transform.position);
+                opponent.GetBodyChecked(knockDir, checkForce);
+                Debug.Log($"BODY CHECK on {opponent.name}!");
+                return;
+            }
+        }
+
+        Debug.Log("Body check missed - no opponent in range");
     }
 
     private void OnDrawGizmosSelected()

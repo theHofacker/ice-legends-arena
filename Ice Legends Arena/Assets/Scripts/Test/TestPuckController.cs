@@ -197,6 +197,27 @@ public class TestPuckController : MonoBehaviour
         Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower}");
     }
 
+    /// <summary>
+    /// Called by opponent body check to force the player to lose the puck.
+    /// </summary>
+    public void ForceLosePuck()
+    {
+        if (!isPossessed) return;
+
+        isPossessed = false;
+        cooldownTimer = shotCooldown;
+
+        // Re-enable collision with player
+        if (playerTransform != null)
+        {
+            Collider playerCol = playerTransform.GetComponent<Collider>();
+            if (playerCol != null)
+                Physics.IgnoreCollision(puckCollider, playerCol, false);
+        }
+
+        Debug.Log("Puck knocked loose!");
+    }
+
     private void OnDrawGizmosSelected()
     {
         // Possession radius
