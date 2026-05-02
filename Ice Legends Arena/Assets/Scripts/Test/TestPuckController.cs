@@ -150,19 +150,19 @@ public class TestPuckController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (isPossessed && playerTransform != null)
+        // Only follow player if possessed AND not in shot cooldown
+        // (cooldown means a shot was just fired - don't override the puck velocity)
+        if (isPossessed && cooldownTimer <= 0f && playerTransform != null)
         {
-            // Follow player - puck sits in front of player in facing direction
             Vector3 dir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
             dir = PhysicsHelper.FlattenY(dir).normalized;
 
             Vector3 target = playerTransform.position + dir * stickOffset;
-            target.y = 0.05f; // Just above ice
+            target.y = 0.05f;
 
             Vector3 newPos = Vector3.Lerp(rb.position, target, followSpeed * Time.fixedDeltaTime);
             rb.MovePosition(newPos);
 
-            // Zero velocity while possessed
             rb.linearVelocity = Vector3.zero;
         }
     }

@@ -11,7 +11,7 @@ public class TestOpponentController : MonoBehaviour
 {
     [Header("Movement")]
     [Range(1f, 20f)]
-    public float moveSpeed = 8f;
+    public float moveSpeed = 6.5f;
 
     [Range(1f, 20f)]
     public float rotationSpeed = 8f;
@@ -32,7 +32,7 @@ public class TestOpponentController : MonoBehaviour
     public float shootDistance = 12f;
 
     [Header("Behavior")]
-    [Tooltip("Which goal this opponent attacks (drag the goal GameObject here)")]
+    [Tooltip("Which goal this opponent attacks (auto-finds if empty)")]
     public Transform attackGoal;
 
     [Tooltip("How close before opponent tries to body check player")]
@@ -51,6 +51,10 @@ public class TestOpponentController : MonoBehaviour
     [Tooltip("How long opponent is stunned after being checked")]
     [Range(0.5f, 3f)]
     public float stunDuration = 1.5f;
+
+    [Header("Appearance")]
+    [Tooltip("Color to apply to the model")]
+    public Color teamColor = Color.red;
 
     // State
     private Rigidbody rb;
@@ -75,9 +79,9 @@ public class TestOpponentController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
 
-        // Ice physics
+        // Ice physics - add some damping so opponent doesn't look frantic
         rb.useGravity = false;
-        rb.linearDamping = 0f;
+        rb.linearDamping = 1f;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
@@ -97,13 +101,16 @@ public class TestOpponentController : MonoBehaviour
 
     private void Start()
     {
-        // Find animator
+        // Find animator and set color
         animator = GetComponentInChildren<Animator>();
         if (animator != null)
         {
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         }
+
+        // Apply team color to all mesh renderers in children
+        ApplyTeamColor();
 
         // Find puck
         GameObject puck = GameObject.FindGameObjectWithTag("Puck");
@@ -120,24 +127,53 @@ public class TestOpponentController : MonoBehaviour
             playerTransform = player.transform;
         }
 
-        // Auto-find attack goal if not assigned (pick the +Z goal)
+        // Auto-find attack goal - opponent attacks the player's goal (IsPlayerGoal = true)
         if (attackGoal == null)
         {
             GameObject[] goals = GameObject.FindGameObjectsWithTag("Goal");
-            float bestZ = float.MinValue;
             foreach (GameObject goal in goals)
             {
-                if (goal.transform.position.z > bestZ)
+                GoalTrigger trigger = goal.GetComponent<GoalTrigger>();
+                if (trigger != null && trigger.IsPlayerGoal)
                 {
-                    bestZ = goal.transform.position.z;
                     attackGoal = goal.transform;
+                    break;
+                }
+            }
+            // Fallback: pick the -Z goal
+            if (attackGoal == null)
+            {
+                float bestZ = float.MaxValue;
+                foreach (GameObject goal in goals)
+                {
+                    if (goal.transform.position.z < bestZ)
+                    {
+                        bestZ = goal.transform.position.z;
+                        attackGoal = goal.transform;
+                    }
                 }
             }
             if (attackGoal != null)
-                Debug.Log($"TestOpponent: Auto-targeting goal at {attackGoal.position}");
+                Debug.Log($"TestOpponent: Attacking goal at {attackGoal.position}");
         }
 
         Debug.Log("TestOpponentController ready");
+    }
+
+    private void ApplyTeamColor()
+    {
+        Renderer[] renderers = GetComponentsInChildren<Renderer>();
+        foreach (Renderer rend in renderers)
+        {
+            // Create material instances so we don't modify shared materials
+            Material[] mats = rend.materials;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                mats[i] = new Material(mats[i]);
+                mats[i].color = teamColor;
+            }
+            rend.materials = mats;
+        }
     }
 
     private void Update()
@@ -167,12 +203,10 @@ public class TestOpponentController : MonoBehaviour
 
         if (hasPuck)
         {
-            // Skate toward goal and shoot when close
             SkateWithPuck();
         }
         else
         {
-            // Chase puck or check player
             ChasePuckOrCheckPlayer();
         }
 
@@ -191,22 +225,22 @@ public class TestOpponentController : MonoBehaviour
     {
         float distToPuck = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
-        // Try to possess
-        if (!hasPuck && possessionCooldown <= 0f && distToPuck <= possessionRadius &&
-            PhysicsHelper.SpeedXZ(puckRb.linearVelocity) < 8f)
+        // Try to possess - only if puck is slow AND player doesn't have it
+        if (!hasPuck && possessionCooldown <= 0f && distToPuck <= possessionRadius)
         {
-            // Check if player's TestPuckController already has it
+            // Don't steal if puck is moving fast (just been shot)
+            if (PhysicsHelper.SpeedXZ(puckRb.linearVelocity) > 5f)
+                return;
+
+            // Don't steal if player has possession
             TestPuckController puckCtrl = puckTransform.GetComponent<TestPuckController>();
             if (puckCtrl != null && puckCtrl.IsPossessed)
-            {
-                return; // Player has it, can't steal (need to body check first)
-            }
+                return;
 
             hasPuck = true;
             puckRb.linearVelocity = Vector3.zero;
             Debug.Log("Opponent possessed puck!");
 
-            // Ignore collision
             Collider myCol = GetComponent<Collider>();
             Collider puckCol = puckTransform.GetComponent<Collider>();
             if (myCol != null && puckCol != null)
@@ -226,7 +260,8 @@ public class TestOpponentController : MonoBehaviour
 
         // Move toward goal
         Vector3 dirToGoal = PhysicsHelper.DirectionXZ(transform.position, attackGoal.position);
-        rb.linearVelocity = dirToGoal * moveSpeed;
+        Vector3 targetVel = dirToGoal * moveSpeed;
+        rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, targetVel, 5f * Time.deltaTime);
         lastMoveDir = dirToGoal;
 
         // Make puck follow
@@ -235,7 +270,6 @@ public class TestOpponentController : MonoBehaviour
         puckRb.MovePosition(Vector3.Lerp(puckRb.position, puckTarget, 25f * Time.deltaTime));
         puckRb.linearVelocity = Vector3.zero;
 
-        // Rotate to face goal
         RotateToward(dirToGoal);
 
         // Shoot when close to goal
@@ -251,7 +285,6 @@ public class TestOpponentController : MonoBehaviour
         if (playerTransform == null) return;
 
         float distToPlayer = PhysicsHelper.DistanceXZ(transform.position, playerTransform.position);
-        float distToPuck = PhysicsHelper.DistanceXZ(transform.position, puckTransform.position);
 
         // If player has the puck and we're close, try body check
         TestPuckController puckCtrl = puckTransform.GetComponent<TestPuckController>();
@@ -263,9 +296,10 @@ public class TestOpponentController : MonoBehaviour
             return;
         }
 
-        // Chase the puck
+        // Chase the puck with smooth acceleration
         Vector3 dirToPuck = PhysicsHelper.DirectionXZ(transform.position, puckTransform.position);
-        rb.linearVelocity = dirToPuck * moveSpeed;
+        Vector3 targetVel = dirToPuck * moveSpeed;
+        rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, targetVel, 5f * Time.deltaTime);
         lastMoveDir = dirToPuck;
         RotateToward(dirToPuck);
     }
@@ -274,11 +308,9 @@ public class TestOpponentController : MonoBehaviour
     {
         checkTimer = checkCooldown;
 
-        // Trigger animation
         if (animator != null)
             animator.SetTrigger(BodyCheckHash);
 
-        // Apply force to player
         Vector3 checkDir = PhysicsHelper.DirectionXZ(transform.position, playerTransform.position);
         Rigidbody playerRb = playerTransform.GetComponent<Rigidbody>();
         if (playerRb != null)
@@ -286,15 +318,11 @@ public class TestOpponentController : MonoBehaviour
             playerRb.linearVelocity = checkDir * checkForce;
         }
 
-        // Force player to lose puck
         TestPuckController puckCtrl = puckTransform.GetComponent<TestPuckController>();
         if (puckCtrl != null && puckCtrl.IsPossessed)
         {
             puckCtrl.ForceLosePuck();
-
-            // Pop puck in random direction
-            Vector3 randomDir = PhysicsHelper.RandomDirectionXZ();
-            puckRb.linearVelocity = randomDir * 10f;
+            puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * 10f;
         }
 
         Debug.Log("Opponent BODY CHECK!");
@@ -303,15 +331,13 @@ public class TestOpponentController : MonoBehaviour
     private void ShootPuck(Vector3 direction)
     {
         hasPuck = false;
-        possessionCooldown = 1f;
+        possessionCooldown = 1.5f;
 
-        // Re-enable collision
         Collider myCol = GetComponent<Collider>();
         Collider puckCol = puckTransform.GetComponent<Collider>();
         if (myCol != null && puckCol != null)
             Physics.IgnoreCollision(myCol, puckCol, false);
 
-        // Shoot
         puckRb.linearVelocity = Vector3.zero;
         puckRb.AddForce(direction * shotPower, ForceMode.Impulse);
 
@@ -335,7 +361,7 @@ public class TestOpponentController : MonoBehaviour
     }
 
     /// <summary>
-    /// Called by player when they body check this opponent
+    /// Called by player when they body check this opponent.
     /// </summary>
     public void GetBodyChecked(Vector3 knockbackDir, float force)
     {
@@ -365,7 +391,7 @@ public class TestOpponentController : MonoBehaviour
 
     private void UpdateAnimation()
     {
-        if (animator == null) return;
+        if (animator == null || animator.runtimeAnimatorController == null) return;
         float speed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
         animator.SetFloat(SpeedHash, speed);
     }
