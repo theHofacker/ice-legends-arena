@@ -18,10 +18,14 @@ public class TestOpponentController : MonoBehaviour
 
     [Header("Puck Possession")]
     [Range(0.5f, 5f)]
-    public float possessionRadius = 2.5f;
+    public float possessionRadius = 1.5f;
 
-    [Range(0.5f, 5f)]
-    public float stickOffset = 1.2f;
+    [Range(0.3f, 5f)]
+    public float stickOffset = 0.7f;
+
+    [Tooltip("How tightly the puck snaps to the stick target while skating")]
+    [Range(10f, 80f)]
+    public float puckFollowSpeed = 40f;
 
     [Header("Shooting")]
     [Range(5f, 40f)]
@@ -36,21 +40,34 @@ public class TestOpponentController : MonoBehaviour
     public Transform attackGoal;
 
     [Tooltip("How close before opponent tries to body check player")]
-    [Range(1f, 5f)]
-    public float checkRange = 2.5f;
+    [Range(0.5f, 5f)]
+    public float checkRange = 1.4f;
 
     [Tooltip("Knockback force on body check")]
     [Range(5f, 30f)]
     public float checkForce = 15f;
+
+    [Tooltip("Speed the puck flies off at when body check knocks it loose")]
+    [Range(2f, 20f)]
+    public float puckKnockLooseSpeed = 8f;
+
+    [Tooltip("How long opponent must wait before re-possessing after a body check (gives puck time to separate)")]
+    [Range(0f, 2f)]
+    public float postCheckRepossessDelay = 0.7f;
+
+    [Header("Containment")]
+    [Tooltip("Hard limit on |pz| — keeps opponent from sailing past the back boards. Goals are at z=±23.73.")]
+    [Range(20f, 30f)]
+    public float zBoundary = 25.5f;
 
     [Tooltip("Seconds between body check attempts")]
     [Range(1f, 5f)]
     public float checkCooldown = 2f;
 
     [Header("Stun")]
-    [Tooltip("How long opponent is stunned after being checked")]
+    [Tooltip("How long opponent is stunned after being checked. Must be >= fall animation length (IH@Hit_Fall_knockback_1 is ~1.7s) or the opponent starts chasing while still mid-fall, which looks like the body is being dragged across the ice.")]
     [Range(0.5f, 3f)]
-    public float stunDuration = 1.5f;
+    public float stunDuration = 2.0f;
 
     [Header("Appearance")]
     [Tooltip("Color to apply to the model")]
@@ -71,6 +88,8 @@ public class TestOpponentController : MonoBehaviour
 
     // Animator hashes
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int MoveXHash = Animator.StringToHash("MoveX");
+    private static readonly int HasPuckHash = Animator.StringToHash("HasPuck");
     private static readonly int ShootHash = Animator.StringToHash("Shoot");
     private static readonly int BodyCheckHash = Animator.StringToHash("BodyCheck");
     private static readonly int GotHitHash = Animator.StringToHash("GotHit");
@@ -78,6 +97,9 @@ public class TestOpponentController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        // Inspector values win — print them so we know what's actually active.
+        Debug.Log($"[TestOpponent] Tuning: possR={possessionRadius}, stick={stickOffset}, puckFollow={puckFollowSpeed}, checkR={checkRange}, knockSpd={puckKnockLooseSpeed}, repossessDelay={postCheckRepossessDelay}");
 
         // Ice physics - add some damping so opponent doesn't look frantic
         rb.useGravity = false;
@@ -191,9 +213,19 @@ public class TestOpponentController : MonoBehaviour
             if (stunTimer <= 0f)
             {
                 isStunned = false;
+                SetPlayerCollisionIgnored(false);
+                SetPuckCollisionIgnored(false);
                 Debug.Log("Opponent recovered from stun");
             }
-            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, 5f * Time.deltaTime);
+            // Two-phase decay: a brief recoil window so the hit still has a visible
+            // launch, then a hard brake so the body comes to rest under the fall
+            // animation. The original single-rate Lerp let the 20 m/s knockback
+            // glide ~3m across the ice while the puck was traveling in the same
+            // direction with the player, which read visually as a tether.
+            float timeStunned = stunDuration - stunTimer;
+            float brakeRate = timeStunned < 0.12f ? 5f : 30f;
+            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, brakeRate * Time.deltaTime);
+            if (rb.linearVelocity.sqrMagnitude < 0.25f) rb.linearVelocity = Vector3.zero;
             UpdateAnimation();
             return;
         }
@@ -218,6 +250,22 @@ public class TestOpponentController : MonoBehaviour
             Vector3 pos = transform.position;
             pos.y = 0f;
             transform.position = pos;
+        }
+
+        // Soft containment behind the back boards (not the goal line). Goals
+        // are at z=±23.73, so allow a bit past so the opponent can skate around
+        // and behind the net. Without this clamp the AI sails to z=±27 and
+        // traces wide arcs along the wall trying to recover.
+        if (Mathf.Abs(transform.position.z) > zBoundary)
+        {
+            Vector3 pos = transform.position;
+            float sign = Mathf.Sign(pos.z);
+            pos.z = sign * zBoundary;
+            transform.position = pos;
+
+            Vector3 v = rb.linearVelocity;
+            if (Mathf.Sign(v.z) == sign) v.z = 0f;
+            rb.linearVelocity = v;
         }
     }
 
@@ -267,7 +315,7 @@ public class TestOpponentController : MonoBehaviour
         // Make puck follow
         Vector3 puckTarget = transform.position + dirToGoal * stickOffset;
         puckTarget.y = 0.05f;
-        puckRb.MovePosition(Vector3.Lerp(puckRb.position, puckTarget, 25f * Time.deltaTime));
+        puckRb.MovePosition(Vector3.Lerp(puckRb.position, puckTarget, puckFollowSpeed * Time.deltaTime));
         puckRb.linearVelocity = Vector3.zero;
 
         RotateToward(dirToGoal);
@@ -298,6 +346,20 @@ public class TestOpponentController : MonoBehaviour
 
         // Chase the puck with smooth acceleration
         Vector3 dirToPuck = PhysicsHelper.DirectionXZ(transform.position, puckTransform.position);
+
+        // Brake-before-turn: if the puck is behind our current heading, kill
+        // velocity first instead of arcing around. Eliminates the "wide circle"
+        // behavior when the puck ricochets behind us after a shot.
+        Vector3 currentVel = rb.linearVelocity;
+        currentVel.y = 0f;
+        if (currentVel.magnitude > 1.5f &&
+            Vector3.Dot(currentVel.normalized, dirToPuck) < -0.2f)
+        {
+            rb.linearVelocity = Vector3.Lerp(currentVel, Vector3.zero, 8f * Time.deltaTime);
+            RotateToward(dirToPuck);
+            return;
+        }
+
         Vector3 targetVel = dirToPuck * moveSpeed;
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, targetVel, 5f * Time.deltaTime);
         lastMoveDir = dirToPuck;
@@ -322,7 +384,11 @@ public class TestOpponentController : MonoBehaviour
         if (puckCtrl != null && puckCtrl.IsPossessed)
         {
             puckCtrl.ForceLosePuck();
-            puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * 10f;
+            puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * puckKnockLooseSpeed;
+            // Force a re-possess delay so the puck visibly separates from the
+            // opponent before they can grab it again. Without this the opponent
+            // re-grabs on the next physics frame and the "steal" looks magnetic.
+            possessionCooldown = postCheckRepossessDelay;
         }
 
         Debug.Log("Opponent BODY CHECK!");
@@ -372,13 +438,54 @@ public class TestOpponentController : MonoBehaviour
         if (hasPuck)
         {
             LosePuck();
-            puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * 8f;
+            puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * puckKnockLooseSpeed;
         }
 
         if (animator != null)
             animator.SetTrigger(GotHitHash);
 
+        // While we're down, let the player pass through us — otherwise the player's
+        // capsule shoves our collapsed body around and it looks like an invisible
+        // tether dragging us behind them. Same goes for the puck: it's glued to
+        // the player via MovePosition each FixedUpdate, and its swept path will
+        // shove our prone capsule across the ice if collision stays enabled.
+        SetPlayerCollisionIgnored(true);
+        SetPuckCollisionIgnored(true);
+
         Debug.Log($"Opponent got BODY CHECKED! Stunned for {stunDuration}s");
+    }
+
+    /// <summary>
+    /// Ignore (or restore) collision between this opponent and the puck. Used so the
+    /// player's possessed puck doesn't drag the stunned body around on its sweep path.
+    /// </summary>
+    private void SetPuckCollisionIgnored(bool ignore)
+    {
+        if (puckTransform == null) return;
+        Collider myCol = GetComponent<Collider>();
+        Collider puckCol = puckTransform.GetComponent<Collider>();
+        if (myCol != null && puckCol != null)
+            Physics.IgnoreCollision(myCol, puckCol, ignore);
+    }
+
+    /// <summary>
+    /// Ignore (or restore) collision between this opponent and the player. Used to
+    /// keep the stunned ragdoll body from being pushed by the player's capsule.
+    /// Iterates ALL colliders in the player's hierarchy (capsule, hockey stick,
+    /// any future equipment) because Physics.IgnoreCollision is per-pair, not per
+    /// Rigidbody — and equipment attached to bone GameObjects sweeps through space
+    /// via the skating animation, pushing the prone body if not excluded.
+    /// </summary>
+    private void SetPlayerCollisionIgnored(bool ignore)
+    {
+        if (playerTransform == null) return;
+        Collider myCol = GetComponent<Collider>();
+        if (myCol == null) return;
+        Collider[] playerCols = playerTransform.GetComponentsInChildren<Collider>(includeInactive: false);
+        foreach (Collider pc in playerCols)
+        {
+            if (pc != null) Physics.IgnoreCollision(myCol, pc, ignore);
+        }
     }
 
     private void RotateToward(Vector3 direction)
@@ -392,8 +499,16 @@ public class TestOpponentController : MonoBehaviour
     private void UpdateAnimation()
     {
         if (animator == null || animator.runtimeAnimatorController == null) return;
-        float speed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
+
+        Vector3 flatVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        float speed = flatVel.magnitude;
         animator.SetFloat(SpeedHash, speed);
+
+        // MoveX = signed strafe relative to facing, [-1, +1]. Drives SkatingWithPuck blend.
+        float strafe = (speed > 0.05f) ? Vector3.Dot(flatVel, transform.right) / Mathf.Max(0.01f, moveSpeed) : 0f;
+        animator.SetFloat(MoveXHash, Mathf.Clamp(strafe, -1f, 1f), 0.1f, Time.deltaTime);
+
+        animator.SetBool(HasPuckHash, hasPuck);
     }
 
     private void OnDrawGizmosSelected()
