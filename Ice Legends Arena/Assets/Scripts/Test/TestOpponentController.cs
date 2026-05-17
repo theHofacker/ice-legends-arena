@@ -90,9 +90,26 @@ public class TestOpponentController : MonoBehaviour
     [Range(15f, 30f)]
     public float heavyKnockback = 20f;
 
+    [Header("Boardcheck")]
+    [Tooltip("Max distance to a wall in the knockback direction for the check to count as a boardcheck. If a wall is within this, tier upgrades to Heavy and gets a stun bonus.")]
+    [Range(0.5f, 5f)]
+    public float boardCheckDistance = 1.0f;
+
+    [Tooltip("Extra stun seconds added to a boardcheck on top of the Heavy tier's normal stunDuration")]
+    [Range(0f, 2f)]
+    public float boardCheckStunBonus = 0.5f;
+
+    [Tooltip("Knockback velocity (m/s) for a boardcheck. Replaces the Heavy tier's full 20 m/s because the wall stops the body anyway — full Heavy velocity would tunnel through the wall collider before physics catches up.")]
+    [Range(2f, 15f)]
+    public float boardCheckKnockback = 7f;
+
     [Header("Appearance")]
     [Tooltip("Color to apply to the model")]
     public Color teamColor = Color.red;
+
+    [Header("Debug")]
+    [Tooltip("Pin the opponent at their current position with AI disabled. Useful for parking them against a wall to test boardchecks.")]
+    public bool debugFreezePosition = false;
 
     // State
     private Rigidbody rb;
@@ -228,6 +245,15 @@ public class TestOpponentController : MonoBehaviour
     private void Update()
     {
         if (puckTransform == null) return;
+
+        // Debug freeze: pin in place, no AI, no drift. Still receives body checks
+        // so you can position them against a wall and test boardcheck detection.
+        if (debugFreezePosition)
+        {
+            rb.linearVelocity = Vector3.zero;
+            UpdateAnimation();
+            return;
+        }
 
         // Tick timers
         if (checkTimer > 0f) checkTimer -= Time.deltaTime;
@@ -462,10 +488,22 @@ public class TestOpponentController : MonoBehaviour
     /// <summary>
     /// Called by player when they body check this opponent. Tier determines
     /// knockback magnitude, stun duration, whether the puck flies loose, and
-    /// which receiver animation plays.
+    /// which receiver animation plays. If the knockback direction would slam
+    /// us into a wall within boardCheckDistance, the tier is upgraded to
+    /// Heavy and a stun bonus is layered on — boardchecks are always brutal
+    /// regardless of the incoming check's original tier.
     /// </summary>
     public void GetBodyChecked(CheckTier tier, Vector3 knockbackDir)
     {
+        // Boardcheck detection: if there's a wall close enough in the direction
+        // we're about to be flung, this check counts as a board hit. Upgrade
+        // the tier and remember it for the post-physics layer-on.
+        bool isBoardCheck = DetectBoardCheck(knockbackDir);
+        if (isBoardCheck)
+        {
+            tier = CheckTier.Heavy;
+        }
+
         // Look up per-tier physics. Light is a stagger — opponent keeps the
         // puck and recovers fast. Medium pushes back hard enough to drop the
         // puck. Heavy is the full fall, gated on stunDuration to cover the
@@ -485,6 +523,15 @@ public class TestOpponentController : MonoBehaviour
             default:
                 knockback = heavyKnockback; stun = stunDuration; dropPuck = true;
                 break;
+        }
+
+        // Boardcheck post-tier extras: lower knockback (wall stops us — full Heavy
+        // velocity tunnels through the collider), extra stun, forced puck drop.
+        if (isBoardCheck)
+        {
+            knockback = boardCheckKnockback;
+            stun += boardCheckStunBonus;
+            dropPuck = true;
         }
 
         isStunned = true;
@@ -513,7 +560,34 @@ public class TestOpponentController : MonoBehaviour
         SetPlayerCollisionIgnored(true);
         SetPuckCollisionIgnored(true);
 
-        Debug.Log($"Opponent got {tier} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
+        Debug.Log($"Opponent got {tier}{(isBoardCheck ? " BOARD" : "")} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
+    }
+
+    /// <summary>
+    /// Raycasts in the knockback direction to detect whether the opponent is
+    /// about to be slammed into a wall. Filters out the player and puck so
+    /// only rink geometry counts. Used to upgrade a check to a boardcheck.
+    /// </summary>
+    private bool DetectBoardCheck(Vector3 knockbackDir)
+    {
+        // Cast from opponent's chest height (slightly above the ice) to avoid
+        // false positives against the ice surface itself.
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+        Vector3 dir = knockbackDir;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.01f) return false;
+        dir.Normalize();
+
+        if (Physics.Raycast(origin, dir, out RaycastHit hit, boardCheckDistance))
+        {
+            // Anything that isn't the player or puck counts as rink geometry.
+            // This is sufficient for the test scene; for the full game we may
+            // want a dedicated Wall layer or tag.
+            if (hit.collider.GetComponent<TestPlayerController>() != null) return false;
+            if (hit.collider.GetComponent<TestPuckController>() != null) return false;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -584,6 +658,35 @@ public class TestOpponentController : MonoBehaviour
         {
             Gizmos.color = Color.magenta;
             Gizmos.DrawLine(transform.position, attackGoal.position);
+        }
+
+        // Live boardcheck prediction: ray in the direction a check from the current
+        // player position would knock us. GREEN = no wall, normal check. RED = wall
+        // in range, this would auto-upgrade to a boardcheck.
+        if (Application.isPlaying && playerTransform != null)
+        {
+            Vector3 origin = transform.position + Vector3.up * 0.5f;
+            Vector3 dir = transform.position - playerTransform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.01f)
+            {
+                dir.Normalize();
+                bool wouldBoardCheck = false;
+                Vector3 hitPoint = origin + dir * boardCheckDistance;
+                if (Physics.Raycast(origin, dir, out RaycastHit hit, boardCheckDistance))
+                {
+                    bool isPlayer = hit.collider.GetComponent<TestPlayerController>() != null;
+                    bool isPuck = hit.collider.GetComponent<TestPuckController>() != null;
+                    if (!isPlayer && !isPuck)
+                    {
+                        wouldBoardCheck = true;
+                        hitPoint = hit.point;
+                    }
+                }
+                Gizmos.color = wouldBoardCheck ? Color.red : Color.green;
+                Gizmos.DrawLine(origin, hitPoint);
+                if (wouldBoardCheck) Gizmos.DrawWireSphere(hitPoint, 0.2f);
+            }
         }
     }
 }
