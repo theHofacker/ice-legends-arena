@@ -65,9 +65,30 @@ public class TestOpponentController : MonoBehaviour
     public float checkCooldown = 2f;
 
     [Header("Stun")]
-    [Tooltip("How long opponent is stunned after being checked. Must be >= fall animation length (IH@Hit_Fall_knockback_1 is ~1.7s) or the opponent starts chasing while still mid-fall, which looks like the body is being dragged across the ice.")]
-    [Range(0.5f, 3f)]
-    public float stunDuration = 2.0f;
+    [Tooltip("Heavy-tier stun duration (s). Must be >= fall animation length (IH@Hit_Fall_knockback_1 is ~1.7s, with blend in/out ~2.7s) or the opponent starts chasing while still mid-fall, which looks like the body is being dragged across the ice.")]
+    [Range(0.5f, 4f)]
+    public float stunDuration = 2.75f;
+
+    [Header("Body Check Tiers")]
+    [Tooltip("Knockback velocity (m/s) for a Light check — just a stagger, opponent keeps the puck")]
+    [Range(2f, 15f)]
+    public float lightKnockback = 8f;
+
+    [Tooltip("Stun duration (s) for a Light check — should match IH@Hit_impact_stagger length")]
+    [Range(0.1f, 1.5f)]
+    public float lightStun = 0.5f;
+
+    [Tooltip("Knockback velocity (m/s) for a Medium check — pushed back, drops puck")]
+    [Range(8f, 20f)]
+    public float mediumKnockback = 14f;
+
+    [Tooltip("Stun duration (s) for a Medium check — should match IH@Hit_impact_forward_1 length")]
+    [Range(0.3f, 2f)]
+    public float mediumStun = 1.2f;
+
+    [Tooltip("Knockback velocity (m/s) for a Heavy check — full fall, drops puck. Heavy stun uses stunDuration above.")]
+    [Range(15f, 30f)]
+    public float heavyKnockback = 20f;
 
     [Header("Appearance")]
     [Tooltip("Color to apply to the model")]
@@ -93,6 +114,12 @@ public class TestOpponentController : MonoBehaviour
     private static readonly int ShootHash = Animator.StringToHash("Shoot");
     private static readonly int BodyCheckHash = Animator.StringToHash("BodyCheck");
     private static readonly int GotHitHash = Animator.StringToHash("GotHit");
+    private static readonly int HitTierHash = Animator.StringToHash("HitTier");
+
+    /// <summary>
+    /// Severity of a body check. Values match the animator's HitTier int parameter.
+    /// </summary>
+    public enum CheckTier { Light = 0, Medium = 1, Heavy = 2 }
 
     private void Awake()
     {
@@ -371,7 +398,13 @@ public class TestOpponentController : MonoBehaviour
         checkTimer = checkCooldown;
 
         if (animator != null)
+        {
+            // Opponent always delivers a Medium-tier check visually — matches its
+            // fixed checkForce. Without setting HitTier explicitly, the animator's
+            // default int value (0 = Light) would play the wrong delivery.
+            animator.SetInteger(HitTierHash, (int)CheckTier.Medium);
             animator.SetTrigger(BodyCheckHash);
+        }
 
         Vector3 checkDir = PhysicsHelper.DirectionXZ(transform.position, playerTransform.position);
         Rigidbody playerRb = playerTransform.GetComponent<Rigidbody>();
@@ -427,22 +460,50 @@ public class TestOpponentController : MonoBehaviour
     }
 
     /// <summary>
-    /// Called by player when they body check this opponent.
+    /// Called by player when they body check this opponent. Tier determines
+    /// knockback magnitude, stun duration, whether the puck flies loose, and
+    /// which receiver animation plays.
     /// </summary>
-    public void GetBodyChecked(Vector3 knockbackDir, float force)
+    public void GetBodyChecked(CheckTier tier, Vector3 knockbackDir)
     {
-        isStunned = true;
-        stunTimer = stunDuration;
-        rb.linearVelocity = knockbackDir * force;
+        // Look up per-tier physics. Light is a stagger — opponent keeps the
+        // puck and recovers fast. Medium pushes back hard enough to drop the
+        // puck. Heavy is the full fall, gated on stunDuration to cover the
+        // fall animation length (see [[stun-vs-anim-length]]).
+        float knockback;
+        float stun;
+        bool dropPuck;
+        switch (tier)
+        {
+            case CheckTier.Light:
+                knockback = lightKnockback; stun = lightStun; dropPuck = false;
+                break;
+            case CheckTier.Medium:
+                knockback = mediumKnockback; stun = mediumStun; dropPuck = true;
+                break;
+            case CheckTier.Heavy:
+            default:
+                knockback = heavyKnockback; stun = stunDuration; dropPuck = true;
+                break;
+        }
 
-        if (hasPuck)
+        isStunned = true;
+        stunTimer = stun;
+        rb.linearVelocity = knockbackDir * knockback;
+
+        if (dropPuck && hasPuck)
         {
             LosePuck();
             puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * puckKnockLooseSpeed;
         }
 
         if (animator != null)
+        {
+            // Set HitTier BEFORE firing the trigger — animator transition reads both
+            // conditions in the same evaluation, so the int must already be set.
+            animator.SetInteger(HitTierHash, (int)tier);
             animator.SetTrigger(GotHitHash);
+        }
 
         // While we're down, let the player pass through us — otherwise the player's
         // capsule shoves our collapsed body around and it looks like an invisible
@@ -452,7 +513,7 @@ public class TestOpponentController : MonoBehaviour
         SetPlayerCollisionIgnored(true);
         SetPuckCollisionIgnored(true);
 
-        Debug.Log($"Opponent got BODY CHECKED! Stunned for {stunDuration}s");
+        Debug.Log($"Opponent got {tier} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
     }
 
     /// <summary>
