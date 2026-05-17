@@ -5,7 +5,10 @@ using UnityEngine.InputSystem;
 /// Simplified player controller for testing basic 3D movement.
 /// No dependencies on formations, teams, abilities, or other systems.
 /// Rink coordinate system: X = width (left/right), Z = length (goal-to-goal), Y = height.
-/// Controls: WASD = move, Space = shoot (handled by TestPuckController), F = body check.
+/// Controls: WASD = move, Space = hold-and-release shot, F = hold-and-release body check.
+/// Both Space and F drive the same TimingMeter — Weak release = Light, Perfect = Medium,
+/// Overcharged = Heavy on the check side. A chargeIntent enum prevents Space and F from
+/// interfering when one is already charging.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(CapsuleCollider))]
@@ -35,13 +38,9 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.5f, 3f)]
     public float checkCooldown = 1f;
 
-    [Tooltip("Player speed (m/s) below this delivers a Light check (stagger, no puck drop)")]
-    [Range(1f, 10f)]
-    public float lightThreshold = 5f;
-
-    [Tooltip("Player speed (m/s) at or above this delivers a Heavy check (full fall). Between light and heavy is Medium.")]
-    [Range(8f, 20f)]
-    public float heavyThreshold = 11f;
+    [Tooltip("Normalized charge fraction (0-1) below which a release counts as Light (button tap). Above this but still before the green zone counts as Medium (partial charge).")]
+    [Range(0.05f, 0.7f)]
+    public float lightChargeThreshold = 0.4f;
 
     [Header("Animation")]
     [Tooltip("Auto-finds Animator in children if empty")]
@@ -62,6 +61,14 @@ public class TestPlayerController : MonoBehaviour
     private InputManager inputManager;
     private float checkTimer = 0f;
     private TimingMeter timingMeter;
+
+    /// <summary>
+    /// Tracks what the player is currently charging so Space (shot) and F (check)
+    /// don't interfere. If Space is held first, F press is ignored until Space
+    /// is released, and vice versa.
+    /// </summary>
+    private enum ChargeIntent { None, Shot, Check }
+    private ChargeIntent chargeIntent = ChargeIntent.None;
 
     // Animator hashes
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
@@ -214,12 +221,8 @@ public class TestPlayerController : MonoBehaviour
     {
         if (Keyboard.current == null) return;
 
-        if (Keyboard.current.fKey.wasPressedThisFrame && checkTimer <= 0f)
-        {
-            TryBodyCheck();
-        }
-
         HandleShotInput();
+        HandleCheckInput();
     }
 
     private void HandleShotInput()
@@ -229,13 +232,15 @@ public class TestPlayerController : MonoBehaviour
         bool spaceDown = Keyboard.current.spaceKey.wasPressedThisFrame;
         bool spaceUp = Keyboard.current.spaceKey.wasReleasedThisFrame;
 
-        // Begin charging only while we actually hold the puck — otherwise the meter
-        // would tick down and fire on a phantom release with no shot to take.
-        if (spaceDown && puckCtrl.IsPossessed && !timingMeter.IsCharging)
+        // Begin charging only while we actually hold the puck and the meter isn't
+        // already in use for a check. Without the intent guard, mashing both keys
+        // would let F release fire a shot or Space release fire a check.
+        if (spaceDown && puckCtrl.IsPossessed && !timingMeter.IsCharging && chargeIntent == ChargeIntent.None)
         {
+            chargeIntent = ChargeIntent.Shot;
             timingMeter.StartCharging();
         }
-        else if (spaceUp && timingMeter.IsCharging)
+        else if (spaceUp && chargeIntent == ChargeIntent.Shot && timingMeter.IsCharging)
         {
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             float timingMul = timingMeter.GetPowerMultiplier(result);
@@ -247,22 +252,57 @@ public class TestPlayerController : MonoBehaviour
 
             if (logInput)
                 Debug.Log($"[TestPlayer] Shot result={result} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={(timingMul * charStat):F2}");
+
+            chargeIntent = ChargeIntent.None;
         }
     }
 
-    private void TryBodyCheck()
+    private void HandleCheckInput()
+    {
+        if (timingMeter == null || Keyboard.current == null) return;
+
+        bool fDown = Keyboard.current.fKey.wasPressedThisFrame;
+        bool fUp = Keyboard.current.fKey.wasReleasedThisFrame;
+
+        if (fDown && checkTimer <= 0f && !timingMeter.IsCharging && chargeIntent == ChargeIntent.None)
+        {
+            chargeIntent = ChargeIntent.Check;
+            timingMeter.StartCharging();
+        }
+        else if (fUp && chargeIntent == ChargeIntent.Check && timingMeter.IsCharging)
+        {
+            float normalized = timingMeter.NormalizedCharge;
+            TimingMeter.TimingResult result = timingMeter.StopCharging();
+            TestOpponentController.CheckTier tier = ChargeToCheckTier(normalized, result);
+            DeliverCheck(tier, result);
+            chargeIntent = ChargeIntent.None;
+        }
+    }
+
+    /// <summary>
+    /// Maps normalized charge + TimingMeter zone to check tier. Heavy is locked
+    /// behind the green zone — perfect timing is the only path to a full-fall hit.
+    /// Missing in either direction (released too early, OR held past green) drops
+    /// to Medium. Very early release (below lightChargeThreshold, default 40%) is
+    /// a Light tap. Mirrors the risk/reward of the shoot mechanic where over-holding
+    /// drops your power back from "perfect."
+    /// </summary>
+    private TestOpponentController.CheckTier ChargeToCheckTier(float normalized, TimingMeter.TimingResult result)
+    {
+        if (result == TimingMeter.TimingResult.Perfect)
+            return TestOpponentController.CheckTier.Heavy;
+
+        // Weak or Overcharged. Inside Weak, split Light vs Medium by lightChargeThreshold;
+        // Overcharged always counts as Medium (over-commit penalty).
+        if (result == TimingMeter.TimingResult.Weak && normalized < lightChargeThreshold)
+            return TestOpponentController.CheckTier.Light;
+
+        return TestOpponentController.CheckTier.Medium;
+    }
+
+    private void DeliverCheck(TestOpponentController.CheckTier tier, TimingMeter.TimingResult timingResult)
     {
         checkTimer = checkCooldown;
-
-        // Classify by impact speed. Slow drift-in is just a stagger; full-skate
-        // approach is a full fall. Speed is sampled from the rigidbody at the
-        // moment F is pressed, not at first contact, so the player commits to a
-        // tier based on their current momentum.
-        float impactSpeed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
-        TestOpponentController.CheckTier tier =
-            impactSpeed < lightThreshold ? TestOpponentController.CheckTier.Light :
-            impactSpeed < heavyThreshold ? TestOpponentController.CheckTier.Medium :
-                                           TestOpponentController.CheckTier.Heavy;
 
         // HitTier must be set BEFORE the trigger — the AnyState transition reads
         // both conditions in the same evaluation pass, so the int has to already
@@ -281,12 +321,12 @@ public class TestPlayerController : MonoBehaviour
             {
                 Vector3 knockDir = PhysicsHelper.DirectionXZ(transform.position, opponent.transform.position);
                 opponent.GetBodyChecked(tier, knockDir);
-                Debug.Log($"BODY CHECK ({tier}) on {opponent.name} at {impactSpeed:F1} m/s");
+                Debug.Log($"BODY CHECK ({tier}, timing={timingResult}) on {opponent.name}");
                 return;
             }
         }
 
-        Debug.Log($"Body check ({tier}) missed - no opponent in range");
+        Debug.Log($"Body check ({tier}, timing={timingResult}) missed - no opponent in range");
     }
 
     private void OnDrawGizmosSelected()
