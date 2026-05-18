@@ -14,24 +14,28 @@ public class TestPuckController : MonoBehaviour
     [Header("Possession")]
     [Tooltip("Distance to auto-possess puck")]
     [Range(0.5f, 8f)]
-    public float possessionRadius = 3f;
+    public float possessionRadius = 1.5f;
 
     [Tooltip("How far in front of player the puck sits")]
-    [Range(0.5f, 5f)]
-    public float stickOffset = 1.5f;
+    [Range(0.3f, 5f)]
+    public float stickOffset = 0.7f;
 
     [Tooltip("How smoothly puck follows player")]
-    [Range(5f, 50f)]
-    public float followSpeed = 25f;
+    [Range(5f, 80f)]
+    public float followSpeed = 50f;
 
     [Header("Shooting")]
-    [Tooltip("Shot power (impulse force)")]
+    [Tooltip("Base shot impulse — multiplied by timing/character/equipment modifiers")]
     [Range(5f, 50f)]
     public float shotPower = 20f;
 
     [Tooltip("Seconds before puck can be re-possessed after shot")]
     [Range(0.3f, 3f)]
     public float shotCooldown = 1f;
+
+    [Tooltip("Max angle (degrees) the puck deflects off facing direction on an Overcharged shot")]
+    [Range(5f, 45f)]
+    public float overchargedSprayAngle = 25f;
 
     [Header("Physics")]
     [Tooltip("Puck linear damping (ice friction)")]
@@ -59,6 +63,9 @@ public class TestPuckController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         puckCollider = GetComponent<SphereCollider>();
+
+        // Inspector values win — print them so we know what's actually active.
+        Debug.Log($"[TestPuck] Tuning: possR={possessionRadius}, stick={stickOffset}, followSpd={followSpeed}");
 
         // Puck physics - stays on ice, slides freely
         rb.useGravity = false;
@@ -127,11 +134,8 @@ public class TestPuckController : MonoBehaviour
                 Physics.IgnoreCollision(puckCollider, playerCol, true);
         }
 
-        // Shoot: Space key (New Input System)
-        if (isPossessed && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-        {
-            Shoot();
-        }
+        // Shooting is now triggered by TestPlayerController via FireTimedShot() so the
+        // puck can stay agnostic about input timing and just react to fire commands.
 
         // Keep puck on ice
         Vector3 pos = transform.position;
@@ -167,34 +171,39 @@ public class TestPuckController : MonoBehaviour
         }
     }
 
-    private void Shoot()
+    /// <summary>
+    /// Fires the puck with a timing-derived power multiplier. Set <paramref name="overcharged"/>
+    /// true to spray the puck off-axis (matches issue #10's "goes wide" spec for the red zone).
+    /// </summary>
+    public void FireTimedShot(float powerMultiplier, bool overcharged)
     {
         if (!isPossessed) return;
 
-        // Release possession
         isPossessed = false;
         cooldownTimer = shotCooldown;
 
-        // Re-enable collision
         Collider playerCol = playerTransform.GetComponent<Collider>();
         if (playerCol != null)
             Physics.IgnoreCollision(puckCollider, playerCol, false);
 
-        // Apply shot force in player's facing direction
         Vector3 shotDir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
         shotDir = PhysicsHelper.FlattenY(shotDir).normalized;
 
-        rb.linearVelocity = Vector3.zero;
-        rb.AddForce(shotDir * shotPower, ForceMode.Impulse);
-
-        // Trigger shoot animation on player
-        TestPlayerController player = playerTransform.GetComponent<TestPlayerController>();
-        if (player != null && player.animator != null)
+        if (overcharged)
         {
-            player.animator.SetTrigger("Shoot");
+            float spray = Random.Range(-overchargedSprayAngle, overchargedSprayAngle);
+            shotDir = Quaternion.Euler(0f, spray, 0f) * shotDir;
         }
 
-        Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower}");
+        rb.linearVelocity = Vector3.zero;
+        rb.AddForce(shotDir * shotPower * powerMultiplier, ForceMode.Impulse);
+
+        // Animation is already playing — it was triggered on Space PRESS by
+        // TestPlayerController so a freeze-at-peak wind-up could be held. Don't
+        // re-trigger here or the slap-shot restarts from the beginning instead
+        // of completing its release phase.
+
+        Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower * powerMultiplier:F1} (mul={powerMultiplier:F2}{(overcharged ? ", OVERCHARGED" : "")})");
     }
 
     /// <summary>

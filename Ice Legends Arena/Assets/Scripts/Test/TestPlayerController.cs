@@ -54,6 +54,11 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.1f, 1f)]
     public float chargeMoveSpeedFactor = 0.5f;
 
+    [Header("Shot Wind-Up")]
+    [Tooltip("Normalized time (0-1) within the Shoot clip where the stick reaches peak pull-back. Animation freezes here while Space is held, resumes on release.")]
+    [Range(0.02f, 0.9f)]
+    public float shotPeakNormalizedTime = 0.128f;
+
     [Header("Debug")]
     public bool logInput = false;
 
@@ -78,6 +83,13 @@ public class TestPlayerController : MonoBehaviour
     private static readonly int ShootHash = Animator.StringToHash("Shoot");
     private static readonly int BodyCheckHash = Animator.StringToHash("BodyCheck");
     private static readonly int HitTierHash = Animator.StringToHash("HitTier");
+    private static readonly int ShotSpeedHash = Animator.StringToHash("ShotSpeed");
+    private static readonly int ChargeIntentHash = Animator.StringToHash("ChargeIntent");
+
+    // Set true between Space-press (Shoot trigger fired, animation playing) and the
+    // frame normalizedTime reaches shotPeakNormalizedTime. Once peak is hit, we set
+    // ShotSpeed=0 to freeze and clear this flag — no further per-frame checking.
+    private bool isShotWindingUp = false;
 
     private TestPuckController puckCtrl;
 
@@ -239,12 +251,33 @@ public class TestPlayerController : MonoBehaviour
         {
             chargeIntent = ChargeIntent.Shot;
             timingMeter.StartCharging();
+
+            // Fire the Shoot animation NOW (on press) — it'll play into the wind-up
+            // and freeze at the peak via UpdateShotWindUpFreeze. Previously the
+            // trigger fired on release; that was fine for instant shots, but doesn't
+            // let us hold a visible pull-back pose while charging.
+            if (animator != null)
+            {
+                animator.SetInteger(ChargeIntentHash, 1); // 1 = Shot
+                animator.SetFloat(ShotSpeedHash, 1f);     // ensure not stuck frozen from a prior shot
+                animator.SetTrigger(ShootHash);
+                isShotWindingUp = true;
+            }
         }
         else if (spaceUp && chargeIntent == ChargeIntent.Shot && timingMeter.IsCharging)
         {
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             float timingMul = timingMeter.GetPowerMultiplier(result);
             float charStat = (characterData != null) ? characterData.shotPower : 1f;
+
+            // Unfreeze the Shoot state so the rest of the slap-shot plays through.
+            // ChargeIntent reset so the Charging state isn't triggered by stale state.
+            if (animator != null)
+            {
+                animator.SetFloat(ShotSpeedHash, 1f);
+                animator.SetInteger(ChargeIntentHash, 0);
+                isShotWindingUp = false;
+            }
 
             // Final = base × character stat × timing zone. Overcharged sprays the puck
             // off-axis to match issue #10's "puck goes wide" spec.
@@ -254,6 +287,20 @@ public class TestPlayerController : MonoBehaviour
                 Debug.Log($"[TestPlayer] Shot result={result} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={(timingMul * charStat):F2}");
 
             chargeIntent = ChargeIntent.None;
+        }
+
+        // While the wind-up is playing, watch for normalizedTime to cross the peak
+        // frame and freeze the Shoot state there. One-shot per shot — flag clears
+        // as soon as we freeze (or on release if the player tapped Space too fast
+        // to reach the peak).
+        if (isShotWindingUp && animator != null)
+        {
+            AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+            if (info.IsName("Shoot") && info.normalizedTime >= shotPeakNormalizedTime)
+            {
+                animator.SetFloat(ShotSpeedHash, 0f);
+                isShotWindingUp = false;
+            }
         }
     }
 
@@ -268,6 +315,7 @@ public class TestPlayerController : MonoBehaviour
         {
             chargeIntent = ChargeIntent.Check;
             timingMeter.StartCharging();
+            if (animator != null) animator.SetInteger(ChargeIntentHash, 2); // 2 = Check
         }
         else if (fUp && chargeIntent == ChargeIntent.Check && timingMeter.IsCharging)
         {
@@ -275,6 +323,7 @@ public class TestPlayerController : MonoBehaviour
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             TestOpponentController.CheckTier tier = ChargeToCheckTier(normalized, result);
             DeliverCheck(tier, result);
+            if (animator != null) animator.SetInteger(ChargeIntentHash, 0);
             chargeIntent = ChargeIntent.None;
         }
     }
