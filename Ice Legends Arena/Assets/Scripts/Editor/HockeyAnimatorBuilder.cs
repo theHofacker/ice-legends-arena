@@ -17,9 +17,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // Animation clip names to search for (prefix patterns from the ICE_HOCKEY pack)
     // GA = with stick (attacker), G = without stick
     private static readonly string[] IdleClips = { "IH@GA_idle", "IH@GA_idle2" };
-    // Skating without the puck — IH@G_L_03 is the matching no-puck variant for the
-    // G_L_03 set we use for puck-carry skating. Fallbacks for safety.
-    private static readonly string[] SkatingClips = { "IH@G_L_03", "IHA@power", "IH@GA_running" };
+    // Skating without the puck — IH@GA_L_03 is the with-stick (GA) variant of the
+    // G_L_03 set. A hockey stick is permanently glued to the right hand bone
+    // (StickAttacher), so the hands must hold a stick-grip pose in EVERY locomotion
+    // clip; the no-stick "G" variants pose a free hand and make the glued stick read
+    // as floating. Idle already uses IH@GA_idle (with-stick), so GA locomotion also
+    // removes the grip "pop" when starting/stopping. Fallbacks are GA too.
+    private static readonly string[] SkatingClips = { "IH@GA_L_03", "IHA@power", "IH@GA_running" };
     // Slap-shot animation with a clear pull-back peak — set up to be paused mid-clip
     // while the player holds Space, then resumed on release. Right_GoalStraight ships
     // as Generic; FindOrPrepareHumanoidClip auto-reimports it as Humanoid and applies
@@ -53,11 +57,12 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // both intents; can split into ChargingShot vs ChargingCheck states later.
     private static readonly string[] ChargingClips = { "IH@Shoot_01FBH_Forward_GoalIdle" };
 
-    // Puck-carry skating: G_L_03 FBH variants used in the SkatingWithPuck blend tree.
-    // The stationary "with puck" idle reuses IH@GA_idle (already a with-stick stance).
-    private static readonly string[] SkateWithPuckForwardClips = { "IH@G_L_03FBH_Forward" };
-    private static readonly string[] SkateWithPuckLeftClips = { "IH@G_L_03FBH_Left" };
-    private static readonly string[] SkateWithPuckRightClips = { "IH@G_L_03FBH_Right" };
+    // Puck-carry skating: GA_L_03 FBH variants (with-stick) used in the SkatingWithPuck
+    // blend tree. GA matches the glued-on stick grip; the stationary "with puck" idle
+    // reuses IH@GA_idle (already a with-stick stance).
+    private static readonly string[] SkateWithPuckForwardClips = { "IH@GA_L_03FBH_Forward" };
+    private static readonly string[] SkateWithPuckLeftClips = { "IH@GA_L_03FBH_Left" };
+    private static readonly string[] SkateWithPuckRightClips = { "IH@GA_L_03FBH_Right" };
 
     [MenuItem("Tools/Ice Legends/Build Hockey Animator")]
     public static void BuildAnimator()
@@ -111,7 +116,10 @@ public class HockeyAnimatorBuilder : MonoBehaviour
 
         // Create states
         AnimatorState idleState = CreateState(rootStateMachine, "Idle", IdleClips, true);
-        AnimatorState skatingState = CreateState(rootStateMachine, "Skating", SkatingClips, true);
+        // Skating uses the full locomotion bake (loop + Y/XZ bake + feet) rather than
+        // loop-only: the GA_ clips are freshly introduced and may ship without XZ bake,
+        // which would drift the body across the ice under applyRootMotion=false.
+        AnimatorState skatingState = CreateLocomotionState(rootStateMachine, "Skating", SkatingClips);
         AnimatorState skatingWithPuckState = CreatePuckSkateBlendTree(controller, rootStateMachine);
         // Shoot state uses FindOrPrepareHumanoidClip so a Generic shot clip (like
         // Right_GoalStraight) gets auto-reimported as Humanoid with Y/XZ bake on
@@ -655,9 +663,12 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         tree.useAutomaticThresholds = false;
         tree.hideFlags = HideFlags.HideInHierarchy;
 
-        AnimationClip leftClip = FindAnimationClipLooped(SkateWithPuckLeftClips);
-        AnimationClip fwdClip = FindAnimationClipLooped(SkateWithPuckForwardClips);
-        AnimationClip rightClip = FindAnimationClipLooped(SkateWithPuckRightClips);
+        // Promote Generic→Humanoid (GA_ clips ship Generic) + bake loop/Y/XZ/feet so
+        // the blend clips animate in place instead of drifting (applyRootMotion=false),
+        // same treatment as the Skating state.
+        AnimationClip leftClip = FindOrPrepareHumanoidClip(SkateWithPuckLeftClips, requireLoop: true);
+        AnimationClip fwdClip = FindOrPrepareHumanoidClip(SkateWithPuckForwardClips, requireLoop: true);
+        AnimationClip rightClip = FindOrPrepareHumanoidClip(SkateWithPuckRightClips, requireLoop: true);
 
         if (leftClip != null) tree.AddChild(leftClip, -1f);
         if (fwdClip != null) tree.AddChild(fwdClip, 0f);
@@ -733,6 +744,31 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         {
             Debug.LogError($"  State '{stateName}': Clip '{clip.name}' is {importer.animationType} (not Humanoid). Will T-POSE on Y Bot. Reimport the FBX as Humanoid.");
         }
+    }
+
+    /// <summary>
+    /// Creates a looping locomotion state (Skating / skate-with-puck). Uses
+    /// FindOrPrepareHumanoidClip with requireLoop so the clip is (a) promoted
+    /// Generic→Humanoid via IH@GA_idle's avatar if needed — the GA_ locomotion clips
+    /// ship Generic and would otherwise T-pose the Y Bot — and (b) baked Loop + Y/XZ +
+    /// feet so it animates in place under applyRootMotion=false instead of drifting
+    /// the body across the ice.
+    /// </summary>
+    private static AnimatorState CreateLocomotionState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
+    {
+        AnimationClip clip = FindOrPrepareHumanoidClip(clipSearchNames, requireLoop: true);
+        AnimatorState state = sm.AddState(stateName);
+        if (clip != null)
+        {
+            state.motion = clip;
+            Debug.Log($"  State '{stateName}': Assigned clip '{clip.name}' (full locomotion bake applied)");
+            WarnIfNotHumanoid(stateName, clip);
+        }
+        else
+        {
+            Debug.LogWarning($"  State '{stateName}': No matching clip found for [{string.Join(", ", clipSearchNames)}]. Assign manually.");
+        }
+        return state;
     }
 
     /// <summary>
