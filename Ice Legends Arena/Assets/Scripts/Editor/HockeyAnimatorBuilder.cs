@@ -16,7 +16,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
 
     // Animation clip names to search for (prefix patterns from the ICE_HOCKEY pack)
     // GA = with stick (attacker), G = without stick
-    private static readonly string[] IdleClips = { "IH@GA_idle", "IH@GA_idle2" };
+    private static readonly string[] IdleClips = { "IH@GA_idle" };
+    // One-shot "idle break" variants played occasionally from the base Idle to add
+    // life to standing still (IdleVariationBehaviour drives the timing). All three
+    // ship Generic, so they're loaded via FindOrPrepareHumanoidClip (promote +
+    // bake) like the GA locomotion clips. Played once then exit-time back to Idle.
+    // One name per break variant, in order → IdleBreak1, IdleBreak2, IdleBreak3.
+    private static readonly string[] IdleBreakClips = { "IH@GA_idle2", "IH@GA_idle3", "IH@GA_idle4" };
     // Skating without the puck — IH@GA_L_03 is the with-stick (GA) variant of the
     // G_L_03 set. A hockey stick is permanently glued to the right hand bone
     // (StickAttacher), so the hands must hold a stick-grip pose in EVERY locomotion
@@ -82,6 +88,10 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         controller.AddParameter("MoveX", AnimatorControllerParameterType.Float); // -1 strafe-left ... +1 strafe-right
         controller.AddParameter("HasPuck", AnimatorControllerParameterType.Bool);
         controller.AddParameter("IsCharging", AnimatorControllerParameterType.Bool);
+        // Idle-break selector: 0 = base idle, 1..N = play idle-break variant N once.
+        // Driven entirely by IdleVariationBehaviour (attached to the Idle state); no
+        // gameplay code touches it.
+        controller.AddParameter("IdleBreak", AnimatorControllerParameterType.Int);
         controller.AddParameter("Shoot", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("BodyCheck", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("GotHit", AnimatorControllerParameterType.Trigger);
@@ -121,6 +131,17 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // which would drift the body across the ice under applyRootMotion=false.
         AnimatorState skatingState = CreateLocomotionState(rootStateMachine, "Skating", SkatingClips);
         AnimatorState skatingWithPuckState = CreatePuckSkateBlendTree(controller, rootStateMachine);
+        // Idle-break variants (one-shot fidgets played occasionally from Idle). Created
+        // here so the locomotion transition wiring below can reference them. Generic
+        // clips → FindOrPrepareHumanoidClip promotes + bakes; not looped (one-shot).
+        AnimatorState[] idleBreakStates = new AnimatorState[IdleBreakClips.Length];
+        for (int i = 0; i < IdleBreakClips.Length; i++)
+        {
+            idleBreakStates[i] = CreateIdleBreakState(rootStateMachine, $"IdleBreak{i + 1}", new[] { IdleBreakClips[i] });
+        }
+        // Attach the variation driver to the base Idle and tell it how many breaks exist.
+        IdleVariationBehaviour idleVar = idleState.AddStateMachineBehaviour<IdleVariationBehaviour>();
+        idleVar.breakCount = IdleBreakClips.Length;
         // Shoot state uses FindOrPrepareHumanoidClip so a Generic shot clip (like
         // Right_GoalStraight) gets auto-reimported as Humanoid with Y/XZ bake on
         // first build. State's speed is driven by the ShotSpeed parameter so the
@@ -191,6 +212,29 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // Cross-edges when HasPuck flips while skating
         AddPuckFlipTransition(skatingState, skatingWithPuckState, hasPuck: true);
         AddPuckFlipTransition(skatingWithPuckState, skatingState, hasPuck: false);
+
+        // Idle-break variants. IdleVariationBehaviour on Idle sets IdleBreak = N after
+        // a randomized dwell; Idle -> IdleBreakN fires, the clip plays once, then exit
+        // time returns to Idle (which resets IdleBreak to 0). Each break is also
+        // interruptible by movement so starting to skate never gets stuck in a fidget.
+        for (int i = 0; i < idleBreakStates.Length; i++)
+        {
+            int variant = i + 1;
+            AnimatorState breakState = idleBreakStates[i];
+
+            // Idle -> IdleBreakN, gated on IdleBreak == N.
+            AnimatorStateTransition toBreak = idleState.AddTransition(breakState);
+            toBreak.AddCondition(AnimatorConditionMode.Equals, variant, "IdleBreak");
+            toBreak.hasExitTime = false;
+            toBreak.duration = 0.3f;
+
+            // IdleBreakN -> Idle once the one-shot finishes.
+            AddStateExitToIdle(breakState, idleState, exitTime: 0.85f);
+
+            // IdleBreakN -> Skating / SkatingWithPuck if the player starts moving.
+            AddLocoTransition(breakState, skatingState, speedGreater: true, hasPuck: false);
+            AddLocoTransition(breakState, skatingWithPuckState, speedGreater: true, hasPuck: true);
+        }
 
         // Any State -> Shoot (trigger)
         AnimatorStateTransition anyToShoot = rootStateMachine.AddAnyStateTransition(shootState);
@@ -322,8 +366,8 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         AssetDatabase.Refresh();
 
         Debug.Log($"Hockey Animator Controller created at: {OutputPath}");
-        Debug.Log("States: Idle, Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium,Heavy}Hit, GetUp, BoardHit, BoardGetUp, Celebration, Block, Charging");
-        Debug.Log("Parameters: Speed (float), MoveX (float), HasPuck (bool), IsCharging (bool), HitTier (int), Shoot/BodyCheck/GotHit/Celebrate/Block (triggers)");
+        Debug.Log("States: Idle (+IdleBreak1..N variation), Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium,Heavy}Hit, GetUp, BoardHit, BoardGetUp, Celebration, Block, Charging");
+        Debug.Log("Parameters: Speed (float), MoveX (float), HasPuck (bool), IsCharging (bool), HitTier (int), IdleBreak (int, driven by IdleVariationBehaviour), Shoot/BodyCheck/GotHit/Celebrate/Block (triggers)");
         Debug.Log("Tier contract: set HitTier (0=Light, 1=Medium, 2=Heavy) BEFORE setting BodyCheck or GotHit trigger.");
         Debug.Log("\nIMPORTANT: You may need to manually assign animation clips to each state if they weren't auto-found.");
         Debug.Log("Open the Animator window (Window > Animation > Animator) to verify the setup.");
@@ -431,6 +475,29 @@ public class HockeyAnimatorBuilder : MonoBehaviour
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Creates a one-shot idle-break state. The GA_idleN variants ship Generic, so
+    /// FindOrPrepareHumanoidClip promotes them to Humanoid (avatar from IH@GA_idle)
+    /// and bakes Y/XZ + feet; not looped — the break plays once and exit-times back
+    /// to the base Idle.
+    /// </summary>
+    private static AnimatorState CreateIdleBreakState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
+    {
+        AnimationClip clip = FindOrPrepareHumanoidClip(clipSearchNames, requireLoop: false);
+        AnimatorState state = sm.AddState(stateName);
+        if (clip != null)
+        {
+            state.motion = clip;
+            Debug.Log($"  State '{stateName}': Assigned clip '{clip.name}' (one-shot idle break)");
+            WarnIfNotHumanoid(stateName, clip);
+        }
+        else
+        {
+            Debug.LogWarning($"  State '{stateName}': No matching clip found for [{string.Join(", ", clipSearchNames)}]. Assign manually.");
+        }
+        return state;
     }
 
     /// <summary>
