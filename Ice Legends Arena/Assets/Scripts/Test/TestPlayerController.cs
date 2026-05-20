@@ -141,6 +141,13 @@ public class TestPlayerController : MonoBehaviour
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate; // Prevent culling from stopping animation
             Debug.Log($"TestPlayerController: Found animator on {animator.gameObject.name}");
+
+            // Foot IK lives on the Animator's own GameObject so OnAnimatorIK fires.
+            // Auto-attach so we don't need the user to add it by hand on every Y Bot.
+            if (animator.GetComponent<FootIKController>() == null)
+            {
+                animator.gameObject.AddComponent<FootIKController>();
+            }
         }
 
         puckCtrl = FindFirstObjectByType<TestPuckController>();
@@ -351,6 +358,28 @@ public class TestPlayerController : MonoBehaviour
 
     private void DeliverCheck(TestOpponentController.CheckTier tier, TimingMeter.TimingResult timingResult)
     {
+        // Resolve target first so we can decide whether to commit. If the only
+        // opponent in range is already stunned, the check whiffs with full refund
+        // (no anim, no cooldown burn) — restarting their fall mid-recovery looked
+        // like the body was spinning on the ice.
+        Collider[] hits = Physics.OverlapSphere(transform.position, checkRange);
+        TestOpponentController target = null;
+        bool stunnedInRange = false;
+        foreach (Collider hit in hits)
+        {
+            TestOpponentController opp = hit.GetComponent<TestOpponentController>();
+            if (opp == null) continue;
+            if (opp.IsStunned) { stunnedInRange = true; continue; }
+            target = opp;
+            break;
+        }
+
+        if (target == null && stunnedInRange)
+        {
+            Debug.Log($"Body check ({tier}, timing={timingResult}) whiffed - target still recovering");
+            return;
+        }
+
         checkTimer = checkCooldown;
 
         // HitTier must be set BEFORE the trigger — the AnyState transition reads
@@ -362,17 +391,12 @@ public class TestPlayerController : MonoBehaviour
             animator.SetTrigger(BodyCheckHash);
         }
 
-        Collider[] hits = Physics.OverlapSphere(transform.position, checkRange);
-        foreach (Collider hit in hits)
+        if (target != null)
         {
-            TestOpponentController opponent = hit.GetComponent<TestOpponentController>();
-            if (opponent != null)
-            {
-                Vector3 knockDir = PhysicsHelper.DirectionXZ(transform.position, opponent.transform.position);
-                opponent.GetBodyChecked(tier, knockDir);
-                Debug.Log($"BODY CHECK ({tier}, timing={timingResult}) on {opponent.name}");
-                return;
-            }
+            Vector3 knockDir = PhysicsHelper.DirectionXZ(transform.position, target.transform.position);
+            target.GetBodyChecked(tier, knockDir);
+            Debug.Log($"BODY CHECK ({tier}, timing={timingResult}) on {target.name}");
+            return;
         }
 
         Debug.Log($"Body check ({tier}, timing={timingResult}) missed - no opponent in range");

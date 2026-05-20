@@ -138,6 +138,17 @@ public class TestOpponentController : MonoBehaviour
     /// </summary>
     public enum CheckTier { Light = 0, Medium = 1, Heavy = 2 }
 
+    /// <summary>True while a hit reaction is still playing; the player should
+    /// whiff checks against a stunned opponent rather than re-triggering the fall.</summary>
+    public bool IsStunned => isStunned;
+
+    // Debug counters consumed by OpponentDebugLogger. Attempts increments on every
+    // GetBodyChecked call; Fires increments only on accepted hits (passed isStunned
+    // guard). Lets us tell from telemetry whether the player is repeatedly trying
+    // to hit a stunned opponent vs. each fall being a fresh hit.
+    [System.NonSerialized] public int dbgGotHitAttempts;
+    [System.NonSerialized] public int dbgGotHitFires;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -173,6 +184,13 @@ public class TestOpponentController : MonoBehaviour
         {
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            // Foot IK lives on the Animator's own GameObject so OnAnimatorIK fires.
+            // Auto-attach so we don't need the user to add it by hand on every Y Bot.
+            if (animator.GetComponent<FootIKController>() == null)
+            {
+                animator.gameObject.AddComponent<FootIKController>();
+            }
         }
 
         // Apply team color to all mesh renderers in children
@@ -246,20 +264,13 @@ public class TestOpponentController : MonoBehaviour
     {
         if (puckTransform == null) return;
 
-        // Debug freeze: pin in place, no AI, no drift. Still receives body checks
-        // so you can position them against a wall and test boardcheck detection.
-        if (debugFreezePosition)
-        {
-            rb.linearVelocity = Vector3.zero;
-            UpdateAnimation();
-            return;
-        }
-
-        // Tick timers
+        // Tick timers + stun BEFORE the debug-freeze early return. Otherwise pinning
+        // the opponent for boardcheck tests leaves isStunned true forever — every
+        // re-check then restarts HeavyHit from frame 0 and the body looks like it's
+        // doing a circle on the ice.
         if (checkTimer > 0f) checkTimer -= Time.deltaTime;
         if (possessionCooldown > 0f) possessionCooldown -= Time.deltaTime;
 
-        // Handle stun
         if (isStunned)
         {
             stunTimer -= Time.deltaTime;
@@ -279,6 +290,15 @@ public class TestOpponentController : MonoBehaviour
             float brakeRate = timeStunned < 0.12f ? 5f : 30f;
             rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, brakeRate * Time.deltaTime);
             if (rb.linearVelocity.sqrMagnitude < 0.25f) rb.linearVelocity = Vector3.zero;
+            UpdateAnimation();
+            return;
+        }
+
+        // Debug freeze: pin in place, no AI, no drift. Reached after the stun block
+        // so the recovery timer still ticks while pinned.
+        if (debugFreezePosition)
+        {
+            rb.linearVelocity = Vector3.zero;
             UpdateAnimation();
             return;
         }
@@ -495,6 +515,16 @@ public class TestOpponentController : MonoBehaviour
     /// </summary>
     public void GetBodyChecked(CheckTier tier, Vector3 knockbackDir)
     {
+        dbgGotHitAttempts++;
+
+        // Don't re-fire while still recovering. Each new GotHit trigger restarts
+        // HeavyHit from frame 0 with the body rotated to the new knockback dir,
+        // which from a top-down camera reads as the body "doing a big circle on
+        // the ice." The player whiffs on an already-down target instead.
+        if (isStunned) return;
+
+        dbgGotHitFires++;
+
         // Boardcheck detection: if there's a wall close enough in the direction
         // we're about to be flung, this check counts as a board hit. Upgrade
         // the tier and remember it for the post-physics layer-on.
