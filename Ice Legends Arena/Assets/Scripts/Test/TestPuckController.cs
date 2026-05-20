@@ -53,6 +53,7 @@ public class TestPuckController : MonoBehaviour
     private Rigidbody rb;
     private SphereCollider puckCollider;
     private Transform playerTransform;
+    private Rigidbody playerRb;
     private bool isPossessed = false;
     private float cooldownTimer = 0f;
     private Vector3 lastPlayerDir = Vector3.forward;
@@ -95,6 +96,7 @@ public class TestPuckController : MonoBehaviour
         if (player != null)
         {
             playerTransform = player.transform;
+            playerRb = player.GetComponent<Rigidbody>();
             Debug.Log($"TestPuckController: Tracking player {playerTransform.name}");
         }
         else
@@ -161,7 +163,13 @@ public class TestPuckController : MonoBehaviour
             Vector3 dir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
             dir = PhysicsHelper.FlattenY(dir).normalized;
 
-            Vector3 target = playerTransform.position + dir * stickOffset;
+            // Lead the target by the lerp's steady-state lag so the puck settles AT
+            // the stick tip while skating instead of trailing behind it. A Vector3.Lerp
+            // toward a moving target equilibrates a distance (targetSpeed / followSpeed)
+            // behind it; adding that vector forward cancels the gap. At rest playerVel
+            // is ~0 so the puck still sits exactly at stickOffset.
+            Vector3 playerVel = playerRb != null ? PhysicsHelper.FlattenY(playerRb.linearVelocity) : Vector3.zero;
+            Vector3 target = playerTransform.position + dir * stickOffset + playerVel / followSpeed;
             target.y = 0.05f;
 
             Vector3 newPos = Vector3.Lerp(rb.position, target, followSpeed * Time.fixedDeltaTime);

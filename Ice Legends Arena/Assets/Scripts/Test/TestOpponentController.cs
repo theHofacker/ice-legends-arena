@@ -385,8 +385,11 @@ public class TestOpponentController : MonoBehaviour
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, targetVel, 5f * Time.deltaTime);
         lastMoveDir = dirToGoal;
 
-        // Make puck follow
-        Vector3 puckTarget = transform.position + dirToGoal * stickOffset;
+        // Make puck follow. Lead the target by the lerp's steady-state lag
+        // (vel / puckFollowSpeed) so the puck settles AT the stick tip while skating
+        // rather than trailing behind it — same compensation as TestPuckController.
+        Vector3 leadVel = PhysicsHelper.FlattenY(rb.linearVelocity);
+        Vector3 puckTarget = transform.position + dirToGoal * stickOffset + leadVel / puckFollowSpeed;
         puckTarget.y = 0.05f;
         puckRb.MovePosition(Vector3.Lerp(puckRb.position, puckTarget, puckFollowSpeed * Time.deltaTime));
         puckRb.linearVelocity = Vector3.zero;
