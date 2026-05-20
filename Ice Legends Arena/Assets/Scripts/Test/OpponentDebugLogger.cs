@@ -64,6 +64,7 @@ public class OpponentDebugLogger : MonoBehaviour
         "Idle", "Skating", "SkatingWithPuck", "Shoot",
         "LightCheck", "MediumCheck", "HeavyCheck",
         "LightHit", "MediumHit", "HeavyHit", "GetUp",
+        "BoardHit", "BoardGetUp",
         "Celebration", "Block", "Charging"
     };
 

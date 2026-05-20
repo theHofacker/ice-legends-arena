@@ -40,6 +40,12 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     private static readonly string[] MediumHitClips = { "IH@Hit_impact_forward_1" };
     private static readonly string[] HeavyHitClips = { "IH@Hit_Fall_knockback_1", "IH@Hit_impact_01" };
     private static readonly string[] GetUpClips = { "IH@Hit_getup_back" };
+    // Boardcheck reaction: a compact forward fall onto the stomach (the body
+    // crumples into the boards instead of sprawling backward through them like
+    // the open-ice knockback fall does). Lands face-down, so recovery uses the
+    // front get-up rather than the back get-up.
+    private static readonly string[] BoardHitClips = { "IH@Hit_Fall_stomach" };
+    private static readonly string[] BoardGetUpClips = { "IH@Hit_getup_front" };
     private static readonly string[] CelebrationClips = { "IH@Celebration_02" };
     private static readonly string[] BlockClips = { "IH@GA_BLockStraight" };
     // Wind-up pose held while charging a shot OR check. The clip is an aim/stick-back
@@ -124,7 +130,7 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // 1.5x to read as a snappier flinch. Heavy has its own fall clip.
         AnimatorState lightHitState = CreateCheckState(rootStateMachine, "LightHit", LightHitClips, 1.5f);
         AnimatorState mediumHitState = CreateState(rootStateMachine, "MediumHit", MediumHitClips, false);
-        AnimatorState heavyHitState = CreateHeavyHitState(rootStateMachine, "HeavyHit", HeavyHitClips);
+        AnimatorState heavyHitState = CreateGroundedFallState(rootStateMachine, "HeavyHit", HeavyHitClips);
         // NO Foot IK on HeavyHit. The knockback fall ends with a stomach→back
         // ground roll; pinning the feet to ice (and lifting the hip) makes the
         // body pivot around the planted feet instead of rolling — the "circle on
@@ -134,6 +140,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // Foot IK on GetUp too — the rising motion goes through a low-crouch
         // pose that can clip below ice without IK.
         getUpState.iKOnFeet = true;
+        // Boardcheck reaction (HitTier=3): forward stomach fall + front get-up.
+        // Same root-motion-bake treatment as HeavyHit so the fall plays without
+        // root motion; no foot IK during the fall, foot IK on the upright get-up.
+        AnimatorState boardHitState = CreateGroundedFallState(rootStateMachine, "BoardHit", BoardHitClips);
+        boardHitState.iKOnFeet = false;
+        AnimatorState boardGetUpState = CreateGroundedGetUpState(rootStateMachine, "BoardGetUp", BoardGetUpClips);
+        boardGetUpState.iKOnFeet = true;
         AnimatorState celebrationState = CreateState(rootStateMachine, "Celebration", CelebrationClips, false);
         AnimatorState blockState = CreateState(rootStateMachine, "Block", BlockClips, false);
         // Wind-up state — looping aim pose held while IsCharging is true.
@@ -199,6 +212,7 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         AddAnyToTierTransition(rootStateMachine, lightHitState, "GotHit", 0);
         AddAnyToTierTransition(rootStateMachine, mediumHitState, "GotHit", 1);
         AddAnyToTierTransition(rootStateMachine, heavyHitState, "GotHit", 2);
+        AddAnyToTierTransition(rootStateMachine, boardHitState, "GotHit", 3);
 
         // Light and Medium don't fall, so they go straight back to Idle.
         // Heavy is the full fall — it goes through GetUp before returning to Idle.
@@ -217,6 +231,19 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         getUpToIdle.hasExitTime = true;
         getUpToIdle.exitTime = 0.9f;
         getUpToIdle.duration = 0.15f;
+
+        // Boardcheck: stomach fall -> front get-up -> Idle. Mirrors the HeavyHit
+        // crossfade timing (early exit, longer blend) so the fall settles into
+        // the get-up cleanly.
+        AnimatorStateTransition boardToGetUp = boardHitState.AddTransition(boardGetUpState);
+        boardToGetUp.hasExitTime = true;
+        boardToGetUp.exitTime = 0.88f;
+        boardToGetUp.duration = 0.25f;
+
+        AnimatorStateTransition boardGetUpToIdle = boardGetUpState.AddTransition(idleState);
+        boardGetUpToIdle.hasExitTime = true;
+        boardGetUpToIdle.exitTime = 0.9f;
+        boardGetUpToIdle.duration = 0.15f;
 
         // Any State -> Celebration (trigger)
         AnimatorStateTransition anyToCelebrate = rootStateMachine.AddAnyStateTransition(celebrationState);
@@ -287,7 +314,7 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         AssetDatabase.Refresh();
 
         Debug.Log($"Hockey Animator Controller created at: {OutputPath}");
-        Debug.Log("States: Idle, Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium,Heavy}Hit, GetUp, Celebration, Block, Charging");
+        Debug.Log("States: Idle, Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium,Heavy}Hit, GetUp, BoardHit, BoardGetUp, Celebration, Block, Charging");
         Debug.Log("Parameters: Speed (float), MoveX (float), HasPuck (bool), IsCharging (bool), HitTier (int), Shoot/BodyCheck/GotHit/Celebrate/Block (triggers)");
         Debug.Log("Tier contract: set HitTier (0=Light, 1=Medium, 2=Heavy) BEFORE setting BodyCheck or GotHit trigger.");
         Debug.Log("\nIMPORTANT: You may need to manually assign animation clips to each state if they weren't auto-found.");
@@ -458,15 +485,15 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates the HeavyHit fall state, baking ALL root motion (rotation + Y + XZ)
-    /// into the body pose. The knockback fall ends with a stomach→back ground roll
-    /// whose rotation, by default, is extracted to root motion — which is discarded
-    /// at runtime because the controllers set applyRootMotion=false. The result is
-    /// the body writhing in place instead of rolling over (the "circle on the back"
-    /// bug). Baking rotation into pose keeps the roll in the bones so it plays
-    /// without root motion. NOT looped — it's a one-shot fall.
+    /// Creates a one-shot fall/knockdown state, baking ALL root motion
+    /// (rotation + Y + XZ) into the body pose. Fall clips like the knockback roll
+    /// or the stomach fall encode their rotation as root motion by default — which
+    /// is discarded at runtime because the controllers set applyRootMotion=false,
+    /// leaving the body writhing in place instead of rolling/falling (the "circle
+    /// on the back" bug). Baking rotation into pose keeps the motion in the bones
+    /// so it plays without root motion. NOT looped — it's a one-shot fall.
     /// </summary>
-    private static AnimatorState CreateHeavyHitState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
+    private static AnimatorState CreateGroundedFallState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
     {
         AnimationClip clip = FindAnimationClipFullyGrounded(clipSearchNames);
         AnimatorState state = sm.AddState(stateName);
@@ -507,6 +534,63 @@ public class HockeyAnimatorBuilder : MonoBehaviour
             if (!clipAnim.lockRootRotation)   { clipAnim.lockRootRotation = true; changed = true; }
             if (!clipAnim.lockRootHeightY)    { clipAnim.lockRootHeightY = true; changed = true; }
             if (!clipAnim.lockRootPositionXZ) { clipAnim.lockRootPositionXZ = true; changed = true; }
+        }
+
+        if (changed)
+        {
+            importer.clipAnimations = clipAnimations;
+            importer.SaveAndReimport();
+        }
+        return clip;
+    }
+
+    /// <summary>
+    /// Creates a get-up state with Root Transform Position (Y) baked into the pose.
+    /// Get-up clips (esp. the front get-up) ship with no Bake Into Pose; with
+    /// applyRootMotion=false the root Y is discarded and the kneeling phase sinks
+    /// the knees/hand below the ice. Baking Y into pose keeps the vertical motion
+    /// self-contained. Leaves Based Upon and any manual Y Offset on the clip alone
+    /// (the array elements are modified in place, so an artist-tuned offset survives).
+    /// Does NOT touch rotation/XZ — those work as-is for the get-ups.
+    /// </summary>
+    private static AnimatorState CreateGroundedGetUpState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
+    {
+        AnimationClip clip = FindAnimationClipBakeRootY(clipSearchNames);
+        AnimatorState state = sm.AddState(stateName);
+        if (clip != null)
+        {
+            state.motion = clip;
+            Debug.Log($"  State '{stateName}': Assigned clip '{clip.name}' (root Y baked into pose)");
+            WarnIfNotHumanoid(stateName, clip);
+        }
+        else
+        {
+            Debug.LogWarning($"  State '{stateName}': No matching clip found for [{string.Join(", ", clipSearchNames)}]. Assign manually.");
+        }
+        return state;
+    }
+
+    /// <summary>
+    /// Finds a clip and bakes ONLY Root Transform Position (Y) into the pose
+    /// (lockRootHeightY). Preserves the clip's existing Based Upon and Offset by
+    /// modifying the clipAnimation entries in place. No loop, no rotation/XZ change.
+    /// </summary>
+    private static AnimationClip FindAnimationClipBakeRootY(string[] searchNames)
+    {
+        AnimationClip clip = FindAnimationClip(searchNames);
+        if (clip == null) return null;
+
+        string path = AssetDatabase.GetAssetPath(clip);
+        ModelImporter importer = AssetImporter.GetAtPath(path) as ModelImporter;
+        if (importer == null) return clip;
+
+        ModelImporterClipAnimation[] clipAnimations = importer.clipAnimations;
+        if (clipAnimations.Length == 0) clipAnimations = importer.defaultClipAnimations;
+
+        bool changed = false;
+        foreach (var clipAnim in clipAnimations)
+        {
+            if (!clipAnim.lockRootHeightY) { clipAnim.lockRootHeightY = true; changed = true; }
         }
 
         if (changed)

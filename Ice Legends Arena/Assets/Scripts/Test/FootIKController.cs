@@ -20,7 +20,7 @@ public class FootIKController : MonoBehaviour
              "The fall clip's stomach→back ground roll needs feet and hips free to " +
              "swing through 3D space; pinning them makes the body pivot around the " +
              "planted feet instead of rolling (the 'circle on the back' bug).")]
-    public string[] pinFeetStates = { "GetUp" };
+    public string[] pinFeetStates = { "GetUp", "BoardGetUp" };
 
     [Tooltip("Minimum world Y for feet. Should match ice surface (0).")]
     public float iceY = 0f;

@@ -136,7 +136,7 @@ public class TestOpponentController : MonoBehaviour
     /// <summary>
     /// Severity of a body check. Values match the animator's HitTier int parameter.
     /// </summary>
-    public enum CheckTier { Light = 0, Medium = 1, Heavy = 2 }
+    public enum CheckTier { Light = 0, Medium = 1, Heavy = 2, Board = 3 }
 
     /// <summary>True while a hit reaction is still playing; the player should
     /// whiff checks against a stunned opponent rather than re-triggering the fall.</summary>
@@ -531,13 +531,14 @@ public class TestOpponentController : MonoBehaviour
         bool isBoardCheck = DetectBoardCheck(knockbackDir);
         if (isBoardCheck)
         {
-            tier = CheckTier.Heavy;
+            tier = CheckTier.Board;
         }
 
         // Look up per-tier physics. Light is a stagger — opponent keeps the
         // puck and recovers fast. Medium pushes back hard enough to drop the
-        // puck. Heavy is the full fall, gated on stunDuration to cover the
-        // fall animation length (see [[stun-vs-anim-length]]).
+        // puck. Heavy is the full backward fall. Board is the forward stomach
+        // fall into the boards. Both falls gate stun on stunDuration to cover the
+        // fall + get-up animation length (see [[stun-vs-anim-length]]).
         float knockback;
         float stun;
         bool dropPuck;
@@ -549,19 +550,20 @@ public class TestOpponentController : MonoBehaviour
             case CheckTier.Medium:
                 knockback = mediumKnockback; stun = mediumStun; dropPuck = true;
                 break;
+            case CheckTier.Board:
+                // Wall stops the body, so lower knockback than Heavy — full Heavy
+                // velocity tunnels through the wall collider before physics catches
+                // up. Stun = Heavy duration + bonus to cover stomach-fall + front
+                // get-up. Plays its own BoardHit state (HitTier=3) so the body
+                // crumples forward into the boards instead of sprawling through them.
+                knockback = boardCheckKnockback;
+                stun = stunDuration + boardCheckStunBonus;
+                dropPuck = true;
+                break;
             case CheckTier.Heavy:
             default:
                 knockback = heavyKnockback; stun = stunDuration; dropPuck = true;
                 break;
-        }
-
-        // Boardcheck post-tier extras: lower knockback (wall stops us — full Heavy
-        // velocity tunnels through the collider), extra stun, forced puck drop.
-        if (isBoardCheck)
-        {
-            knockback = boardCheckKnockback;
-            stun += boardCheckStunBonus;
-            dropPuck = true;
         }
 
         isStunned = true;
@@ -590,7 +592,7 @@ public class TestOpponentController : MonoBehaviour
         SetPlayerCollisionIgnored(true);
         SetPuckCollisionIgnored(true);
 
-        Debug.Log($"Opponent got {tier}{(isBoardCheck ? " BOARD" : "")} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
+        Debug.Log($"Opponent got {tier} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
     }
 
     /// <summary>
