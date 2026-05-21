@@ -59,6 +59,10 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.02f, 0.9f)]
     public float shotPeakNormalizedTime = 0.128f;
 
+    [Tooltip("Normalized time (0-1) within the Shoot clip where the stick blade contacts the puck on the forward swing. The puck launches at this frame (not on Space release), so the shot syncs with the visible swing-through. Must be > shotPeakNormalizedTime and < the Shoot->Idle exit time (0.9). Tune to your shot clip.")]
+    [Range(0.02f, 0.9f)]
+    public float shotContactNormalizedTime = 0.35f;
+
     [Header("Debug")]
     public bool logInput = false;
 
@@ -90,6 +94,13 @@ public class TestPlayerController : MonoBehaviour
     // frame normalizedTime reaches shotPeakNormalizedTime. Once peak is hit, we set
     // ShotSpeed=0 to freeze and clear this flag — no further per-frame checking.
     private bool isShotWindingUp = false;
+
+    // Set true on Space release (shot committed, power locked) until the Shoot
+    // animation reaches shotContactNormalizedTime, when the puck actually launches.
+    // The puck stays possessed (riding the stick) through the forward swing until then.
+    private bool isAwaitingContact = false;
+    private float pendingShotPower = 0f;
+    private bool pendingShotOvercharged = false;
 
     private TestPuckController puckCtrl;
 
@@ -254,7 +265,7 @@ public class TestPlayerController : MonoBehaviour
         // Begin charging only while we actually hold the puck and the meter isn't
         // already in use for a check. Without the intent guard, mashing both keys
         // would let F release fire a shot or Space release fire a check.
-        if (spaceDown && puckCtrl.IsPossessed && !timingMeter.IsCharging && chargeIntent == ChargeIntent.None)
+        if (spaceDown && puckCtrl.IsPossessed && !timingMeter.IsCharging && chargeIntent == ChargeIntent.None && !isAwaitingContact)
         {
             chargeIntent = ChargeIntent.Shot;
             timingMeter.StartCharging();
@@ -286,12 +297,17 @@ public class TestPlayerController : MonoBehaviour
                 isShotWindingUp = false;
             }
 
-            // Final = base × character stat × timing zone. Overcharged sprays the puck
-            // off-axis to match issue #10's "puck goes wide" spec.
-            puckCtrl.FireTimedShot(timingMul * charStat, result == TimingMeter.TimingResult.Overcharged);
+            // Lock the shot power now (timing is judged at release) but DON'T launch
+            // yet — defer to the stick-contact frame so the puck flies in sync with the
+            // visible swing-through. The puck stays possessed and rides the stick until
+            // the contact-frame check below fires it. Final = base × character stat × timing zone;
+            // Overcharged sprays the puck off-axis (issue #10's "puck goes wide" spec).
+            pendingShotPower = timingMul * charStat;
+            pendingShotOvercharged = result == TimingMeter.TimingResult.Overcharged;
+            isAwaitingContact = true;
 
             if (logInput)
-                Debug.Log($"[TestPlayer] Shot result={result} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={(timingMul * charStat):F2}");
+                Debug.Log($"[TestPlayer] Shot released result={result} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={pendingShotPower:F2} (launch deferred to contact frame)");
 
             chargeIntent = ChargeIntent.None;
         }
@@ -307,6 +323,23 @@ public class TestPlayerController : MonoBehaviour
             {
                 animator.SetFloat(ShotSpeedHash, 0f);
                 isShotWindingUp = false;
+            }
+        }
+
+        // After release, launch the puck the instant the forward swing reaches the
+        // contact frame so the shot is synced to the visible stick-on-puck moment.
+        // Failsafe: if the Shoot state is interrupted (e.g. a body-check) before
+        // contact, fire immediately so the puck never stays stuck in possession.
+        if (isAwaitingContact && animator != null)
+        {
+            AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+            bool inShoot = info.IsName("Shoot");
+            if ((inShoot && info.normalizedTime >= shotContactNormalizedTime) || !inShoot)
+            {
+                puckCtrl.FireTimedShot(pendingShotPower, pendingShotOvercharged);
+                isAwaitingContact = false;
+                if (logInput)
+                    Debug.Log($"[TestPlayer] Puck launched at contact (inShoot={inShoot}, nt={(inShoot ? info.normalizedTime : -1f):F2})");
             }
         }
     }
