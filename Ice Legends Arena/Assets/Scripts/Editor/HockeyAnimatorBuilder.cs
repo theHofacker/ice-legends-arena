@@ -63,12 +63,14 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // both intents; can split into ChargingShot vs ChargingCheck states later.
     private static readonly string[] ChargingClips = { "IH@Shoot_01FBH_Forward_GoalIdle" };
 
-    // Puck-carry skating: GA_L_03 FBH variants (with-stick) used in the SkatingWithPuck
+    // Puck-carry skating: GA_L_01 FBH variants (with-stick) used in the SkatingWithPuck
     // blend tree. GA matches the glued-on stick grip; the stationary "with puck" idle
-    // reuses IH@GA_idle (already a with-stick stance).
-    private static readonly string[] SkateWithPuckForwardClips = { "IH@GA_L_03FBH_Forward" };
-    private static readonly string[] SkateWithPuckLeftClips = { "IH@GA_L_03FBH_Left" };
-    private static readonly string[] SkateWithPuckRightClips = { "IH@GA_L_03FBH_Right" };
+    // reuses IH@GA_idle (already a with-stick stance). The 03 set looked angled to one
+    // side (baked into the clip); 01 is the A/B alternative — revert if it's worse.
+    // Note: the 'Right' clip in the 01 set ships as "RIght" (capital I) in the asset pack.
+    private static readonly string[] SkateWithPuckForwardClips = { "IH@GA_L_01FBH_Forward" };
+    private static readonly string[] SkateWithPuckLeftClips = { "IH@GA_L_01FBH_Left" };
+    private static readonly string[] SkateWithPuckRightClips = { "IH@GA_L_01FBH_RIght" };
 
     [MenuItem("Tools/Ice Legends/Build Hockey Animator")]
     public static void BuildAnimator()
