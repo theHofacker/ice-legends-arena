@@ -54,6 +54,7 @@ public class TestPuckController : MonoBehaviour
     private SphereCollider puckCollider;
     private Transform playerTransform;
     private Rigidbody playerRb;
+    private StickAttacher playerStick;     // null if the player has no bone-attached stick; we fall back to legacy offset follow
     private bool isPossessed = false;
     private float cooldownTimer = 0f;
     private Vector3 lastPlayerDir = Vector3.forward;
@@ -97,7 +98,11 @@ public class TestPuckController : MonoBehaviour
         {
             playerTransform = player.transform;
             playerRb = player.GetComponent<Rigidbody>();
-            Debug.Log($"TestPuckController: Tracking player {playerTransform.name}");
+            // Pin the puck to the bone-attached blade if the player has one. Falls back to
+            // the legacy "playerPos + dir * stickOffset" follow if no StickAttacher exists.
+            playerStick = player.GetComponentInChildren<StickAttacher>();
+            Debug.Log($"TestPuckController: Tracking player {playerTransform.name} " +
+                      (playerStick != null ? $"— pinning puck to blade on {playerStick.name}" : "— legacy stickOffset follow (no StickAttacher)"));
         }
         else
         {
@@ -160,16 +165,29 @@ public class TestPuckController : MonoBehaviour
         // (cooldown means a shot was just fired - don't override the puck velocity)
         if (isPossessed && cooldownTimer <= 0f && playerTransform != null)
         {
-            Vector3 dir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
-            dir = PhysicsHelper.FlattenY(dir).normalized;
-
-            // Lead the target by the lerp's steady-state lag so the puck settles AT
-            // the stick tip while skating instead of trailing behind it. A Vector3.Lerp
-            // toward a moving target equilibrates a distance (targetSpeed / followSpeed)
-            // behind it; adding that vector forward cancels the gap. At rest playerVel
-            // is ~0 so the puck still sits exactly at stickOffset.
+            // Lead the target by the lerp's steady-state lag so the puck settles AT the
+            // anchor while skating instead of trailing behind it. A Vector3.Lerp toward a
+            // moving target equilibrates a distance (targetSpeed / followSpeed) behind it;
+            // adding that vector forward cancels the gap. At rest playerVel is ~0 so the
+            // puck still sits exactly on the anchor.
             Vector3 playerVel = playerRb != null ? PhysicsHelper.FlattenY(playerRb.linearVelocity) : Vector3.zero;
-            Vector3 target = playerTransform.position + dir * stickOffset + playerVel / followSpeed;
+
+            Vector3 target;
+            if (playerStick != null)
+            {
+                // Animator-driven stick: the actual blade contact point in world. Tracks
+                // every clip (skate / idle / turn) automatically because StickAttacher
+                // recomputes the stick pose from the hand bones each frame.
+                target = playerStick.GetBladeContactPoint() + playerVel / followSpeed;
+            }
+            else
+            {
+                // Legacy fallback: fixed offset forward of the player. Only correct when
+                // the stick is presumed to extend straight ahead by stickOffset units.
+                Vector3 dir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
+                dir = PhysicsHelper.FlattenY(dir).normalized;
+                target = playerTransform.position + dir * stickOffset + playerVel / followSpeed;
+            }
             target.y = 0.05f;
 
             Vector3 newPos = Vector3.Lerp(rb.position, target, followSpeed * Time.fixedDeltaTime);
