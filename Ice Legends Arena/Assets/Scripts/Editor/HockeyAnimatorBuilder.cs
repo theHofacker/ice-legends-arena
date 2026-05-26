@@ -12,6 +12,10 @@ using System.Linq;
 public class HockeyAnimatorBuilder : MonoBehaviour
 {
     private const string AnimationsFolder = "Assets/ICE_HOCKEY/Animations";
+    // Extra folder for in-house / Mixamo clips that aren't part of the ICE_HOCKEY pack.
+    // Searched alongside AnimationsFolder by FindAnimationClip and LoadAvatarFromClipNamed.
+    private const string ExtraAnimationsFolder = "Assets/Animation";
+    private static readonly string[] AnimationSearchFolders = { AnimationsFolder, ExtraAnimationsFolder };
     private const string OutputPath = "Assets/Animation/HockeyPlayerAnimator.controller";
 
     // Animation clip names to search for (prefix patterns from the ICE_HOCKEY pack)
@@ -465,7 +469,7 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     /// </summary>
     private static Avatar LoadAvatarFromClipNamed(string clipName)
     {
-        string[] guids = AssetDatabase.FindAssets(clipName, new[] { AnimationsFolder });
+        string[] guids = AssetDatabase.FindAssets(clipName, AnimationSearchFolders);
         foreach (string guid in guids)
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
@@ -871,11 +875,16 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Searches the ICE_HOCKEY animations folder for a clip matching one of the given names.
-    /// Prefers exact filename match (so "IH@G_L_03" doesn't accidentally grab
-    /// "IH@G_L_03FBH_Forward"), but falls back to the first prefix match if no
-    /// exact filename exists (so "IH@Shoot_01FBH_Forward" still resolves to
-    /// "IH@Shoot_01FBH_Forward_GoalStraight" etc.).
+    /// Searches the animation folders for a clip matching one of the given names.
+    /// Resolution order:
+    ///   Pass 0 — exact SUB-CLIP name match (so a multi-clip FBX like
+    ///            Mixamo_BodyCheck_Heavy.fbx, which hosts both "mixamo.com" (the
+    ///            delivery) and "Mixamo_BodyCheck_Heavy_WindUp" (the wind-up),
+    ///            resolves each by its intended name).
+    ///   Pass 1 — exact filename match (so "IH@G_L_03" doesn't accidentally grab
+    ///            "IH@G_L_03FBH_Forward").
+    ///   Pass 2 — first prefix match (so "IH@Shoot_01FBH_Forward" still resolves
+    ///            to "IH@Shoot_01FBH_Forward_GoalStraight" etc.).
     /// </summary>
     private static AnimationClip FindAnimationClip(string[] searchNames)
     {
@@ -883,7 +892,16 @@ public class HockeyAnimatorBuilder : MonoBehaviour
 
         foreach (string searchName in searchNames)
         {
-            string[] guids = AssetDatabase.FindAssets(searchName, new[] { AnimationsFolder });
+            string[] guids = AssetDatabase.FindAssets(searchName, AnimationSearchFolders);
+
+            // Pass 0: try exact sub-clip name match. Required for multi-clip FBXs where
+            // the sub-clip name differs from the file's basename.
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                AnimationClip clip = LoadClipByName(path, searchName);
+                if (clip != null) return clip;
+            }
 
             // Pass 1: try exact filename match.
             foreach (string guid in guids)
@@ -909,6 +927,23 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         }
 
         return firstFallback;
+    }
+
+    /// <summary>
+    /// Loads the AnimationClip sub-asset at <paramref name="path"/> whose name exactly
+    /// matches <paramref name="clipName"/>. Used to resolve named sub-clips on
+    /// multi-clip FBXs (e.g. picking the wind-up sub-clip out of an FBX whose first
+    /// sub-clip is the full delivery).
+    /// </summary>
+    private static AnimationClip LoadClipByName(string path, string clipName)
+    {
+        Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(path);
+        foreach (Object subAsset in subAssets)
+        {
+            if (subAsset is AnimationClip clip && clip.name == clipName && !clip.name.StartsWith("__preview__"))
+                return clip;
+        }
+        return null;
     }
 
     private static AnimationClip LoadFirstClip(string path)
