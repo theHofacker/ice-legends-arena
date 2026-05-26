@@ -548,9 +548,15 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         ModelImporterClipAnimation[] clipAnimations = importer.clipAnimations;
         if (clipAnimations.Length == 0) clipAnimations = importer.defaultClipAnimations;
 
+        // Only modify the SUB-CLIP whose name matches the one we resolved. Iterating
+        // every sub-clip on the FBX is dangerous now that we host multiple sub-clips
+        // per file (e.g. Mixamo_BodyCheck_Heavy carries both the delivery AND a
+        // wind-up sub-clip) — blanket-forcing loopTime onto siblings broke the
+        // one-shot delivery into an infinite loop.
         bool changed = false;
         foreach (var clipAnim in clipAnimations)
         {
+            if (clipAnim.name != clip.name) continue;
             if (!clipAnim.loopTime)             { clipAnim.loopTime = true; changed = true; }
             if (!clipAnim.lockRootHeightY)      { clipAnim.lockRootHeightY = true; changed = true; }
             if (!clipAnim.lockRootPositionXZ)   { clipAnim.lockRootPositionXZ = true; changed = true; }
