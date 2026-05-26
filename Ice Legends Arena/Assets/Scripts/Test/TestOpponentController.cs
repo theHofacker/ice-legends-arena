@@ -132,11 +132,20 @@ public class TestOpponentController : MonoBehaviour
     private static readonly int BodyCheckHash = Animator.StringToHash("BodyCheck");
     private static readonly int GotHitHash = Animator.StringToHash("GotHit");
     private static readonly int HitTierHash = Animator.StringToHash("HitTier");
+    private static readonly int HitDirectionHash = Animator.StringToHash("HitDirection");
 
     /// <summary>
     /// Severity of a body check. Values match the animator's HitTier int parameter.
     /// </summary>
     public enum CheckTier { Light = 0, Medium = 1, Heavy = 2, Board = 3 }
+
+    /// <summary>
+    /// Direction the hit came FROM relative to the opponent's facing. Values match
+    /// the animator's HitDirection int parameter (0=Front, 1=Back, 2=Left, 3=Right).
+    /// Computed from knockbackDir vs transform.forward/right inside GetBodyChecked.
+    /// Only used by the Heavy tier — Light/Medium hit reactions ignore it.
+    /// </summary>
+    public enum HitDirection { Front = 0, Back = 1, Left = 2, Right = 3 }
 
     /// <summary>True while a hit reaction is still playing; the player should
     /// whiff checks against a stunned opponent rather than re-triggering the fall.</summary>
@@ -579,11 +588,25 @@ public class TestOpponentController : MonoBehaviour
             puckRb.linearVelocity = PhysicsHelper.RandomDirectionXZ() * puckKnockLooseSpeed;
         }
 
+        // Hit direction matters only for the Heavy fall — the four HeavyHit_* states
+        // pick which fall plays based on this. Computed from where the knockback is
+        // pushing the body relative to its current facing:
+        //   knockback aligned with forward  → body shoved forward → hit came from BEHIND
+        //   knockback opposes forward       → body shoved backward → hit came from FRONT
+        //   knockback aligned with right    → body shoved right → hit came from LEFT
+        //   knockback opposes right         → body shoved left → hit came from RIGHT
+        // Whichever axis (forward vs right) has the larger dot wins; ties bias to
+        // front/back since those have stronger directional reads.
+        HitDirection direction = ComputeHitDirection(knockbackDir);
+
         if (animator != null)
         {
-            // Set HitTier BEFORE firing the trigger — animator transition reads both
-            // conditions in the same evaluation, so the int must already be set.
+            // Set HitTier AND HitDirection BEFORE firing the trigger — the AnyState
+            // transitions for the directional HeavyHit_* states evaluate all three
+            // conditions (trigger + HitTier + HitDirection) in the same pass, so
+            // both ints must already be set when GotHit fires.
             animator.SetInteger(HitTierHash, (int)tier);
+            animator.SetInteger(HitDirectionHash, (int)direction);
             animator.SetTrigger(GotHitHash);
         }
 
@@ -595,7 +618,32 @@ public class TestOpponentController : MonoBehaviour
         SetPlayerCollisionIgnored(true);
         SetPuckCollisionIgnored(true);
 
-        Debug.Log($"Opponent got {tier} CHECKED! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
+        Debug.Log($"Opponent got {tier} CHECKED from {direction}! Stunned for {stun}s, knockback {knockback} m/s, puck dropped: {dropPuck}");
+    }
+
+    /// <summary>
+    /// Resolves the dominant hit axis (forward/back vs left/right) for the directional
+    /// Heavy hit reaction. Compares knockbackDir to the opponent's transform.forward
+    /// and transform.right via dot product; whichever axis has the larger magnitude
+    /// wins. The sign of the dot picks the side (positive forward dot = body shoved
+    /// in facing direction = hit from behind). Falls back to Front on a degenerate
+    /// (zero-length) knockback direction.
+    /// </summary>
+    private HitDirection ComputeHitDirection(Vector3 knockbackDir)
+    {
+        if (knockbackDir.sqrMagnitude < 1e-6f) return HitDirection.Front;
+        // Flatten to XZ since the opponent stays on the ice plane; a small Y bleed
+        // from the knockback vector would otherwise skew the dot products.
+        Vector3 flat = new Vector3(knockbackDir.x, 0f, knockbackDir.z);
+        if (flat.sqrMagnitude < 1e-6f) return HitDirection.Front;
+        flat.Normalize();
+
+        float forwardDot = Vector3.Dot(flat, transform.forward);
+        float rightDot   = Vector3.Dot(flat, transform.right);
+
+        if (Mathf.Abs(forwardDot) >= Mathf.Abs(rightDot))
+            return forwardDot > 0f ? HitDirection.Back : HitDirection.Front;
+        return rightDot > 0f ? HitDirection.Left : HitDirection.Right;
     }
 
     /// <summary>

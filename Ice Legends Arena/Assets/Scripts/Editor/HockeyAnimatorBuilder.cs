@@ -57,7 +57,19 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // standard impact). Heavy uses the full fall clip and gates on stunDuration.
     private static readonly string[] LightHitClips = { "IH@Hit_impact_forward_1" };
     private static readonly string[] MediumHitClips = { "IH@Hit_impact_forward_1" };
-    private static readonly string[] HeavyHitClips = { "IH@Hit_Fall_knockback_1", "IH@Hit_impact_01" };
+    // Heavy hit reactions are now 4-way directional, keyed by the HitDirection int
+    // parameter (0=Front, 1=Back, 2=Left, 3=Right). TestOpponentController sets it
+    // from knockbackDir vs the opponent's facing BEFORE firing GotHit, same contract
+    // as HitTier. Front uses the existing pack backward-sprawl (body shoved back);
+    // Back/Left/Right come from Mixamo. Each falls back to the pack backward-sprawl
+    // if the Mixamo clip is missing so a missing-asset doesn't break the animator.
+    private static readonly string[] HeavyHitFrontClips = { "IH@Hit_Fall_knockback_1", "IH@Hit_impact_01" };
+    private static readonly string[] HeavyHitBackClips  = { "Mixamo_HeavyHit_Back",  "IH@Hit_Fall_stomach", "IH@Hit_Fall_knockback_1" };
+    private static readonly string[] HeavyHitLeftClips  = { "Mixamo_HeavyHit_Left",  "IH@Hit_Fall_knockback_1" };
+    private static readonly string[] HeavyHitRightClips = { "Mixamo_HeavyHit_Right", "IH@Hit_Fall_knockback_1" };
+    // Get-up route depends on which side the body lands on. Front/Side falls end on
+    // the back (face-up) → back-getup. Back fall ends on the stomach (face-down) →
+    // front-getup (reuses BoardGetUpClips below).
     private static readonly string[] GetUpClips = { "IH@Hit_getup_back" };
     // Boardcheck reaction: a compact forward fall onto the stomach (the body
     // crumples into the boards instead of sprawling backward through them like
@@ -116,6 +128,12 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // Tier selector for both check delivery and hit reaction: 0=Light, 1=Medium, 2=Heavy.
         // Caller MUST set HitTier BEFORE firing BodyCheck or GotHit, or the wrong state plays.
         controller.AddParameter("HitTier", AnimatorControllerParameterType.Int);
+        // Direction the hit came FROM, relative to the opponent's facing: 0=Front,
+        // 1=Back, 2=Left, 3=Right. Only used by the Heavy tier's hit reaction — the
+        // four HeavyHit_* states each gate on (GotHit + HitTier==2 + HitDirection==N).
+        // Same contract as HitTier: caller MUST SetInteger("HitDirection", N) BEFORE
+        // SetTrigger("GotHit") or the wrong fall plays. Light/Medium ignore it.
+        controller.AddParameter("HitDirection", AnimatorControllerParameterType.Int);
         // Per-state speed multiplier on the Shoot state. Player sets to 0 to freeze
         // the wind-up at the peak frame while Space is held, then back to 1 on release
         // so the slap-shot completes. Defaults to 1 below — float parameters default to
@@ -183,12 +201,20 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // 1.5x to read as a snappier flinch. Heavy has its own fall clip.
         AnimatorState lightHitState = CreateCheckState(rootStateMachine, "LightHit", LightHitClips, 1.5f);
         AnimatorState mediumHitState = CreateState(rootStateMachine, "MediumHit", MediumHitClips, false);
-        AnimatorState heavyHitState = CreateGroundedFallState(rootStateMachine, "HeavyHit", HeavyHitClips);
-        // NO Foot IK on HeavyHit. The knockback fall ends with a stomach→back
-        // ground roll; pinning the feet to ice (and lifting the hip) makes the
-        // body pivot around the planted feet instead of rolling — the "circle on
-        // the back" bug. Foot IK belongs only on upright recovery poses (GetUp).
-        heavyHitState.iKOnFeet = false;
+        // Heavy hit reaction splits 4-way by HitDirection (0=Front, 1=Back, 2=Left,
+        // 3=Right). The opponent controller picks the direction from knockbackDir vs
+        // its facing before firing GotHit, so the visible fall matches the hit angle.
+        // NO Foot IK on any fall state — the knockback ground-roll ends with a hip
+        // pivot that planting the feet would convert into the "circle on the back"
+        // bug. Foot IK belongs only on upright recovery poses (the get-ups).
+        AnimatorState heavyHitFrontState = CreateGroundedFallState(rootStateMachine, "HeavyHit_Front", HeavyHitFrontClips);
+        heavyHitFrontState.iKOnFeet = false;
+        AnimatorState heavyHitBackState  = CreateGroundedFallState(rootStateMachine, "HeavyHit_Back",  HeavyHitBackClips);
+        heavyHitBackState.iKOnFeet = false;
+        AnimatorState heavyHitLeftState  = CreateGroundedFallState(rootStateMachine, "HeavyHit_Left",  HeavyHitLeftClips);
+        heavyHitLeftState.iKOnFeet = false;
+        AnimatorState heavyHitRightState = CreateGroundedFallState(rootStateMachine, "HeavyHit_Right", HeavyHitRightClips);
+        heavyHitRightState.iKOnFeet = false;
         AnimatorState getUpState = CreateState(rootStateMachine, "GetUp", GetUpClips, false);
         // Foot IK on GetUp too — the rising motion goes through a low-crouch
         // pose that can clip below ice without IK.
@@ -286,23 +312,30 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         AddStateExitToIdle(heavyCheckState, idleState, exitTime: 0.9f);
 
         // Any State -> tier-specific hit reaction (GotHit trigger + HitTier int).
+        // Heavy splits 4-way by HitDirection — see AddAnyToHeavyHitTransition below.
         AddAnyToTierTransition(rootStateMachine, lightHitState, "GotHit", 0);
         AddAnyToTierTransition(rootStateMachine, mediumHitState, "GotHit", 1);
-        AddAnyToTierTransition(rootStateMachine, heavyHitState, "GotHit", 2);
+        AddAnyToHeavyHitTransition(rootStateMachine, heavyHitFrontState, 0);
+        AddAnyToHeavyHitTransition(rootStateMachine, heavyHitBackState,  1);
+        AddAnyToHeavyHitTransition(rootStateMachine, heavyHitLeftState,  2);
+        AddAnyToHeavyHitTransition(rootStateMachine, heavyHitRightState, 3);
         AddAnyToTierTransition(rootStateMachine, boardHitState, "GotHit", 3);
 
         // Light and Medium don't fall, so they go straight back to Idle.
         // Heavy is the full fall — it goes through GetUp before returning to Idle.
         AddStateExitToIdle(lightHitState, idleState, exitTime: 0.9f);
         AddStateExitToIdle(mediumHitState, idleState, exitTime: 0.9f);
-        // Start the crossfade earlier (0.88) and stretch it (0.25s) so the tail of
-        // the roll blends into the start of getup_back instead of snapping. The roll
-        // end-pose and the getup start-pose don't line up exactly, so a longer blend
-        // hides the seam.
-        AnimatorStateTransition heavyToGetUp = heavyHitState.AddTransition(getUpState);
-        heavyToGetUp.hasExitTime = true;
-        heavyToGetUp.exitTime = 0.88f;
-        heavyToGetUp.duration = 0.25f;
+        // Per-direction routing into a get-up:
+        //   Front fall (body shoved backward, lands on back)       -> back get-up
+        //   Back fall  (body shoved forward, lands on stomach)     -> front get-up (BoardGetUp)
+        //   Left/Right fall (side spin; Mixamo typically face-up)  -> back get-up
+        // Start crossfade early (0.88) with a 0.25s blend so the tail of the roll
+        // melts into the start of the get-up instead of snapping (the roll end-pose
+        // and get-up start-pose don't line up exactly, so a longer blend hides the seam).
+        AddHeavyFallToGetUp(heavyHitFrontState, getUpState);
+        AddHeavyFallToGetUp(heavyHitBackState,  boardGetUpState);
+        AddHeavyFallToGetUp(heavyHitLeftState,  getUpState);
+        AddHeavyFallToGetUp(heavyHitRightState, getUpState);
 
         AnimatorStateTransition getUpToIdle = getUpState.AddTransition(idleState);
         getUpToIdle.hasExitTime = true;
@@ -391,9 +424,10 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         AssetDatabase.Refresh();
 
         Debug.Log($"Hockey Animator Controller created at: {OutputPath}");
-        Debug.Log("States: Idle (+IdleBreak1..N variation), Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium,Heavy}Hit, GetUp, BoardHit, BoardGetUp, Celebration, Block, Charging");
-        Debug.Log("Parameters: Speed (float), MoveX (float), HasPuck (bool), IsCharging (bool), HitTier (int), IdleBreak (int, driven by IdleVariationBehaviour), Shoot/BodyCheck/GotHit/Celebrate/Block (triggers)");
+        Debug.Log("States: Idle (+IdleBreak1..N variation), Skating, SkatingWithPuck (BlendTree), Shoot, {Light,Medium,Heavy}Check, {Light,Medium}Hit, HeavyHit_{Front,Back,Left,Right}, GetUp, BoardHit, BoardGetUp, Celebration, Block, Charging");
+        Debug.Log("Parameters: Speed (float), MoveX (float), HasPuck (bool), IsCharging (bool), HitTier (int), HitDirection (int), IdleBreak (int, driven by IdleVariationBehaviour), Shoot/BodyCheck/GotHit/Celebrate/Block (triggers)");
         Debug.Log("Tier contract: set HitTier (0=Light, 1=Medium, 2=Heavy) BEFORE setting BodyCheck or GotHit trigger.");
+        Debug.Log("Heavy hit direction contract: ALSO set HitDirection (0=Front, 1=Back, 2=Left, 3=Right) BEFORE GotHit when HitTier==2.");
         Debug.Log("\nIMPORTANT: You may need to manually assign animation clips to each state if they weren't auto-found.");
         Debug.Log("Open the Animator window (Window > Animation > Animator) to verify the setup.");
 
@@ -733,6 +767,34 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         t.hasExitTime = false;
         t.duration = 0.05f;
         t.canTransitionToSelf = false;
+    }
+
+    /// <summary>
+    /// Any State → directional Heavy hit reaction, gated on (GotHit + HitTier==2 +
+    /// HitDirection==direction). Caller (TestOpponentController.GetBodyChecked) MUST
+    /// set BOTH HitTier and HitDirection BEFORE firing GotHit, in the same Update.
+    /// </summary>
+    private static void AddAnyToHeavyHitTransition(AnimatorStateMachine sm, AnimatorState target, int direction)
+    {
+        AnimatorStateTransition t = sm.AddAnyStateTransition(target);
+        t.AddCondition(AnimatorConditionMode.If, 0, "GotHit");
+        t.AddCondition(AnimatorConditionMode.Equals, 2, "HitTier");
+        t.AddCondition(AnimatorConditionMode.Equals, direction, "HitDirection");
+        t.hasExitTime = false;
+        t.duration = 0.05f;
+        t.canTransitionToSelf = false;
+    }
+
+    /// <summary>
+    /// Heavy directional fall → get-up. Early exit (0.88) and longer blend (0.25s)
+    /// to hide the seam between the roll's end pose and the get-up's start pose.
+    /// </summary>
+    private static void AddHeavyFallToGetUp(AnimatorState fall, AnimatorState getUp)
+    {
+        AnimatorStateTransition t = fall.AddTransition(getUp);
+        t.hasExitTime = true;
+        t.exitTime = 0.88f;
+        t.duration = 0.25f;
     }
 
     /// <summary>
