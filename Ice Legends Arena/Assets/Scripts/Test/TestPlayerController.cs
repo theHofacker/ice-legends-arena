@@ -70,6 +70,23 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.02f, 0.9f)]
     public float shotContactNormalizedTime = 0.35f;
 
+    [Header("Body Check Contact")]
+    [Tooltip("Normalized time (0-1) within the HeavyCheck clip where the stick visibly contacts the opponent. The knockback impulse applies at this frame (not on F release), so the opponent flies in sync with the visible swing-through. Set to 0 to keep the old instant-on-release behavior.")]
+    [Range(0f, 0.9f)]
+    public float heavyCheckContactNormalizedTime = 0.25f;
+
+    [Tooltip("Same as heavyCheckContactNormalizedTime, for the MediumCheck delivery. Pack clip is short, so default 0 keeps Medium snappy/instant.")]
+    [Range(0f, 0.9f)]
+    public float mediumCheckContactNormalizedTime = 0f;
+
+    [Tooltip("Same as heavyCheckContactNormalizedTime, for the LightCheck poke. Default 0 — the LightCheck clip is fast enough that any deferral feels laggy.")]
+    [Range(0f, 0.9f)]
+    public float lightCheckContactNormalizedTime = 0f;
+
+    [Tooltip("Hard timeout (s) for deferred check-knockback. If the swing animation never reaches its contact frame within this window (e.g. the player got hit and the check state was cancelled), apply the knockback anyway so a queued check can't silently whiff.")]
+    [Range(0.1f, 1.5f)]
+    public float checkContactTimeout = 0.6f;
+
     [Header("Debug")]
     public bool logInput = false;
 
@@ -80,6 +97,16 @@ public class TestPlayerController : MonoBehaviour
     // since the press, charge hasn't committed yet." Crosses checkTapGracePeriod to
     // commit; resets to -1 on commit or on release-during-grace (which fires a poke).
     private float checkPendingTime = -1f;
+    // Deferred check-knockback state. Mirrors the Shot's isAwaitingContact/pending*
+    // pattern: trigger fires on release so the visual swing starts, but the impulse
+    // on the opponent (target.GetBodyChecked) waits until the swing's contact frame.
+    // Cleared when the impulse fires or the timeout expires (whichever first).
+    private bool isAwaitingCheckContact = false;
+    private TestOpponentController.CheckTier pendingCheckTier;
+    private TestOpponentController pendingCheckTarget;
+    private Vector3 pendingCheckKnockDir;
+    private TimingMeter.TimingResult pendingCheckTimingResult;
+    private float pendingCheckTimeRemaining = 0f;
     private TimingMeter timingMeter;
 
     /// <summary>
@@ -409,6 +436,31 @@ public class TestPlayerController : MonoBehaviour
             if (animator != null) animator.SetInteger(ChargeIntentHash, 0);
             chargeIntent = ChargeIntent.None;
         }
+
+        // Deferred-knockback contact sync (mirrors the shot's contact-frame deferral
+        // at line ~344). Once DeliverCheck stages a pending hit, we watch the animator
+        // each frame and fire the impulse the moment the tier's check state reaches
+        // its contact normalizedTime. Timeout failsafe handles the case where the
+        // check state never gets entered (preempted by GotHit, etc.) so a queued hit
+        // can't silently whiff. Cleared inside FireDeferredCheck.
+        if (isAwaitingCheckContact)
+        {
+            pendingCheckTimeRemaining -= Time.deltaTime;
+            if (pendingCheckTimeRemaining <= 0f)
+            {
+                FireDeferredCheck("timeout failsafe");
+            }
+            else if (animator != null)
+            {
+                AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+                string targetState = GetCheckStateName(pendingCheckTier);
+                float contactNT = GetCheckContactNormalizedTime(pendingCheckTier);
+                if (targetState != null && info.IsName(targetState) && info.normalizedTime >= contactNT)
+                {
+                    FireDeferredCheck($"contact frame reached (nt={info.normalizedTime:F2})");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -470,12 +522,76 @@ public class TestPlayerController : MonoBehaviour
         if (target != null)
         {
             Vector3 knockDir = PhysicsHelper.DirectionXZ(transform.position, target.transform.position);
+            float contactNT = GetCheckContactNormalizedTime(tier);
+            if (contactNT > 0f)
+            {
+                // Defer the impulse until the swing reaches the visible contact frame.
+                // Knockback direction is locked at trigger time so the opponent flies in
+                // the direction the player was facing AT release, not where they end up
+                // after the wind-down — feels more like a connected hit than a homing one.
+                isAwaitingCheckContact = true;
+                pendingCheckTier = tier;
+                pendingCheckTarget = target;
+                pendingCheckKnockDir = knockDir;
+                pendingCheckTimingResult = timingResult;
+                pendingCheckTimeRemaining = checkContactTimeout;
+                Debug.Log($"BODY CHECK ({tier}, timing={timingResult}) on {target.name} — awaiting contact frame (nt>={contactNT:F2})");
+                return;
+            }
             target.GetBodyChecked(tier, knockDir);
             Debug.Log($"BODY CHECK ({tier}, timing={timingResult}) on {target.name}");
             return;
         }
 
         Debug.Log($"Body check ({tier}, timing={timingResult}) missed - no opponent in range");
+    }
+
+    /// <summary>
+    /// Per-tier contact normalized time. 0 = apply knockback instantly (legacy behavior);
+    /// >0 = defer until the corresponding check state's clip reaches that fraction.
+    /// </summary>
+    private float GetCheckContactNormalizedTime(TestOpponentController.CheckTier tier)
+    {
+        switch (tier)
+        {
+            case TestOpponentController.CheckTier.Heavy: return heavyCheckContactNormalizedTime;
+            case TestOpponentController.CheckTier.Medium: return mediumCheckContactNormalizedTime;
+            case TestOpponentController.CheckTier.Light:  return lightCheckContactNormalizedTime;
+            default: return 0f;
+        }
+    }
+
+    /// <summary>
+    /// Animator state name for a given check tier. Used by the contact-sync loop to
+    /// verify the animator actually entered the expected state before reading
+    /// normalizedTime — guards against stale reads if a higher-priority trigger
+    /// (e.g. GotHit) preempted the check.
+    /// </summary>
+    private static string GetCheckStateName(TestOpponentController.CheckTier tier)
+    {
+        switch (tier)
+        {
+            case TestOpponentController.CheckTier.Heavy: return "HeavyCheck";
+            case TestOpponentController.CheckTier.Medium: return "MediumCheck";
+            case TestOpponentController.CheckTier.Light:  return "LightCheck";
+            default: return null;
+        }
+    }
+
+    /// <summary>
+    /// Applies the deferred knockback. Called either when the animator's contact frame
+    /// is reached OR when the timeout expires. Always clears the pending state so we
+    /// can't double-apply.
+    /// </summary>
+    private void FireDeferredCheck(string reason)
+    {
+        if (pendingCheckTarget != null)
+        {
+            pendingCheckTarget.GetBodyChecked(pendingCheckTier, pendingCheckKnockDir);
+            Debug.Log($"BODY CHECK ({pendingCheckTier}, timing={pendingCheckTimingResult}) applied — {reason}");
+        }
+        isAwaitingCheckContact = false;
+        pendingCheckTarget = null;
     }
 
     private void OnDrawGizmosSelected()
