@@ -42,6 +42,13 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.05f, 0.7f)]
     public float lightChargeThreshold = 0.4f;
 
+    [Tooltip("Grace period after F is pressed before the wind-up actually starts. " +
+             "Release F within this window and the player goes straight to a quick stick poke (LightCheck) " +
+             "with no wind-up animation. Hold past this window and the wind-up commits and the timing meter starts. " +
+             "Set to 0 to start the wind-up instantly on press.")]
+    [Range(0f, 0.3f)]
+    public float checkTapGracePeriod = 0.12f;
+
     [Header("Animation")]
     [Tooltip("Auto-finds Animator in children if empty")]
     public Animator animator;
@@ -69,6 +76,10 @@ public class TestPlayerController : MonoBehaviour
     private Rigidbody rb;
     private InputManager inputManager;
     private float checkTimer = 0f;
+    // Tap-grace tracker: -1 means "not in grace"; >=0 means "F held this many seconds
+    // since the press, charge hasn't committed yet." Crosses checkTapGracePeriod to
+    // commit; resets to -1 on commit or on release-during-grace (which fires a poke).
+    private float checkPendingTime = -1f;
     private TimingMeter timingMeter;
 
     /// <summary>
@@ -351,14 +362,46 @@ public class TestPlayerController : MonoBehaviour
         bool fDown = Keyboard.current.fKey.wasPressedThisFrame;
         bool fUp = Keyboard.current.fKey.wasReleasedThisFrame;
 
+        // F-down only puts us into a "pending" grace window. The wind-up state and
+        // timing meter don't start until the grace expires — releasing inside grace
+        // bypasses the wind-up entirely and fires a clean LightCheck poke. Branches
+        // below are independent (not else-if) so a same-frame tap (fDown + fUp in one
+        // Update at low framerate) still resolves correctly.
         if (fDown && checkTimer <= 0f && !timingMeter.IsCharging && chargeIntent == ChargeIntent.None)
         {
             chargeIntent = ChargeIntent.Check;
-            timingMeter.StartCharging();
-            if (animator != null) animator.SetInteger(ChargeIntentHash, 2); // 2 = Check
+            checkPendingTime = 0f;
+        }
+
+        if (chargeIntent == ChargeIntent.Check && checkPendingTime >= 0f)
+        {
+            // Still in grace — decide whether to fire the tap poke or commit to charging.
+            if (fUp)
+            {
+                // Tap: skip the wind-up state entirely, fire LightCheck directly.
+                // No timing meter result to consult (it never started), so we hand a
+                // synthetic Weak/normalized=0 to keep ChargeToCheckTier on its Light branch.
+                DeliverCheck(TestOpponentController.CheckTier.Light, TimingMeter.TimingResult.Weak);
+                chargeIntent = ChargeIntent.None;
+                checkPendingTime = -1f;
+            }
+            else
+            {
+                checkPendingTime += Time.deltaTime;
+                if (checkPendingTime >= checkTapGracePeriod)
+                {
+                    // Grace expired with F still held — NOW commit. Timing meter starts
+                    // here so the visible green window aligns with the held time after
+                    // the wind-up actually appears, not from the press itself.
+                    timingMeter.StartCharging();
+                    if (animator != null) animator.SetInteger(ChargeIntentHash, 2); // 2 = Check
+                    checkPendingTime = -1f;
+                }
+            }
         }
         else if (fUp && chargeIntent == ChargeIntent.Check && timingMeter.IsCharging)
         {
+            // Released after commit — normal timing-meter resolution path.
             float normalized = timingMeter.NormalizedCharge;
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             TestOpponentController.CheckTier tier = ChargeToCheckTier(normalized, result);
