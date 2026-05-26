@@ -39,10 +39,15 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // as Generic; FindOrPrepareHumanoidClip auto-reimports it as Humanoid and applies
     // bake settings on first build. Fallback is the previous Forward_GoalStraight clip.
     private static readonly string[] ShootClips = { "IH@Shoot_01FBH_Right_GoalStraight", "IH@Shoot_01FBH_Forward_GoalStraight" };
-    // Single delivery clip shared by all three check tiers — varied via state.speed
-    // (Light=1.3x snappy poke, Medium=1.0x standard, Heavy=0.85x wound-up slam).
-    // The pack ships no straight-on "light" check clip, only directional Hit_01 variants.
+    // Light + Medium share the pack's straight-on check clip — varied via state.speed
+    // (Light=1.3x snappy poke, Medium=1.0x standard). The pack ships no dedicated
+    // straight-on "light" check clip, only directional Hit_01 variants.
     private static readonly string[] BodyCheckClips = { "IH@GA_MoveStraightHeavyHit_01" };
+    // Heavy uses a dedicated Mixamo delivery clip (Assets/Animation/Mixamo_BodyCheck_Heavy.fbx)
+    // — bigger wound-up slam pose than the pack clip. Falls back to the pack clip if missing.
+    // Already Humanoid + bake-into-pose ON per Mixamo import (see import walkthrough); the
+    // builder's FindOrPrepareHumanoidClip path will still re-apply Y/XZ/feet bake on rebuild.
+    private static readonly string[] HeavyCheckClips = { "Mixamo_BodyCheck_Heavy", "IH@GA_MoveStraightHeavyHit_01" };
     // Three-tier receiver reactions. Of the Humanoid Hit_impact_* clips, only
     // forward_1 has explicit clipAnimations with Y bake + heightFromFeet=Feet —
     // the others (backward_1, forward_2) lack clipAnimations entries and fall
@@ -62,10 +67,17 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     private static readonly string[] BoardGetUpClips = { "IH@Hit_getup_front" };
     private static readonly string[] CelebrationClips = { "IH@Celebration_02" };
     private static readonly string[] BlockClips = { "IH@GA_BLockStraight" };
-    // Wind-up pose held while charging a shot OR check. The clip is an aim/stick-back
-    // stance — reads naturally as "about to swing." First-pass uses one clip for
-    // both intents; can split into ChargingShot vs ChargingCheck states later.
-    private static readonly string[] ChargingClips = { "IH@Shoot_01FBH_Forward_GoalIdle" };
+    // Wind-up pose held while charging a CHECK. The Charging state is only entered
+    // when ChargeIntent == 2 (Check) — shots never come here; the Shoot state freezes
+    // itself at peak via ShotSpeed=0 instead. So this clip needs to match the body
+    // pose at the start of the HEAVY check delivery, or there's a visible "snap"
+    // between charge and release.
+    //
+    // Mixamo_BodyCheck_Heavy_WindUp is a multi-clip sub-asset on the same FBX as the
+    // delivery — restrict it to just the wound-up hold frames in the importer
+    // (Inspector → Animation tab → + → Start/End on the loaded peak frames, Loop ON).
+    // Fallback to the old shoot-idle pose if the sub-clip hasn't been created yet.
+    private static readonly string[] ChargingCheckClips = { "Mixamo_BodyCheck_Heavy_WindUp", "IH@Shoot_01FBH_Forward_GoalIdle" };
 
     // Puck-carry skating: GA_L_01 FBH variants (with-stick) used in the SkatingWithPuck
     // blend tree. GA matches the glued-on stick grip; the stationary "with puck" idle
@@ -159,7 +171,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // visible wind-up matches the tier (snappy poke vs. wound-up slam).
         AnimatorState lightCheckState = CreateCheckState(rootStateMachine, "LightCheck", BodyCheckClips, 1.3f);
         AnimatorState mediumCheckState = CreateCheckState(rootStateMachine, "MediumCheck", BodyCheckClips, 1.0f);
-        AnimatorState heavyCheckState = CreateCheckState(rootStateMachine, "HeavyCheck", BodyCheckClips, 0.85f);
+        // Heavy speed dialed UP (not down like the pack clip): the Mixamo delivery is
+        // a longer, naturally-paced full-body action — playing it slow looks like wading
+        // through molasses. To also cut the leading wind-up dead-frames, trim the
+        // clip's Start/End range on Mixamo_BodyCheck_Heavy.fbx → Animation tab in the
+        // Inspector (the Charging pose already shows the wind-up; the delivery should
+        // start at the peak and crash forward into contact).
+        AnimatorState heavyCheckState = CreateCheckState(rootStateMachine, "HeavyCheck", HeavyCheckClips, 1.5f);
         // Three receiver reactions. Light and Medium share the same clip (forward_1)
         // since it's the only Humanoid impact with proper Y bake; Light plays at
         // 1.5x to read as a snappier flinch. Heavy has its own fall clip.
@@ -184,12 +202,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         boardGetUpState.iKOnFeet = true;
         AnimatorState celebrationState = CreateState(rootStateMachine, "Celebration", CelebrationClips, false);
         AnimatorState blockState = CreateState(rootStateMachine, "Block", BlockClips, false);
-        // Wind-up state — looping aim pose held while IsCharging is true.
-        // Uses CreateChargingState which forces Loop + Y/XZ bake + feet-based on
-        // the clip's import settings, since IH@Shoot_01FBH_Forward_GoalIdle ships
-        // with empty clipAnimations and otherwise defaults to un-baked Y (which
-        // would sink the body into the ice while charging).
-        AnimatorState chargingState = CreateChargingState(rootStateMachine, "Charging", ChargingClips);
+        // Wind-up state — plays the wind-up sub-clip once, then holds the last frame
+        // until release. With the new Mixamo_BodyCheck_Heavy_WindUp clip the player
+        // visibly raises the stick to chest position during the held charge instead
+        // of snapping into the pose. Speed matches HeavyCheck (1.5x) so the rise-up
+        // tempo feels consistent with the delivery that follows.
+        AnimatorState chargingState = CreateChargingState(rootStateMachine, "Charging", ChargingCheckClips);
+        chargingState.speed = 1.5f;
 
         // Set default state
         rootStateMachine.defaultState = idleState;
@@ -507,15 +526,16 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates a wind-up state that loops an aim/charge pose. Forces the clip's
-    /// import settings to Loop=true, Y-bake=true, XZ-bake=true, feet-based=true
-    /// the first time the builder runs — the ICE_HOCKEY pack ships several
-    /// Humanoid clips with empty clipAnimations that default to un-baked Y,
-    /// which would sink the model into the ice during the wind-up.
+    /// Creates a wind-up state. Uses FindOrPrepareHumanoidClip with requireLoop=false:
+    /// the clip plays once and Unity naturally holds the last keyframe until something
+    /// transitions out, so a multi-frame "stick rising to chest" wind-up plays through
+    /// AND then holds at the peak pose during the held-charge portion. A single-frame
+    /// pose (old IH@Shoot_01FBH_Forward_GoalIdle fallback) works the same way — it
+    /// just has nothing to play through.
     /// </summary>
     private static AnimatorState CreateChargingState(AnimatorStateMachine sm, string stateName, string[] clipSearchNames)
     {
-        AnimationClip clip = FindAnimationClipWithFullBake(clipSearchNames);
+        AnimationClip clip = FindOrPrepareHumanoidClip(clipSearchNames, requireLoop: false);
         AnimatorState state = sm.AddState(stateName);
         if (clip != null)
         {
