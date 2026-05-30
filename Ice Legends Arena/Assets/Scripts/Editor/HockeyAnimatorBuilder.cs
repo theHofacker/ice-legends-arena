@@ -39,10 +39,16 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // as Generic; FindOrPrepareHumanoidClip auto-reimports it as Humanoid and applies
     // bake settings on first build. Fallback is the previous Forward_GoalStraight clip.
     private static readonly string[] ShootClips = { "IH@Shoot_01FBH_Right_GoalStraight", "IH@Shoot_01FBH_Forward_GoalStraight" };
-    // Light + Medium share the pack's straight-on check clip — varied via state.speed
-    // (Light=1.3x snappy poke, Medium=1.0x standard). The pack ships no dedicated
-    // straight-on "light" check clip, only directional Hit_01 variants.
+    // Light uses the pack's straight-on check clip (a stick-poke), played fast (1.3x)
+    // to read as a snappy jab. The pack ships no dedicated straight-on "light" check
+    // clip, only directional Hit_01 variants.
     private static readonly string[] BodyCheckClips = { "IH@GA_MoveStraightHeavyHit_01" };
+    // Medium uses a dedicated Mixamo delivery clip (Assets/Animation/Mixamo_BodyCheck_Medium.fbx)
+    // — a fuller shoulder/body check that seams off the chest-ready wind-up, instead of
+    // the pack stick-poke which looked wrong releasing from the chest-ready charge pose.
+    // Falls back to the pack clip if the Mixamo file is missing. Already Humanoid +
+    // bake-into-pose per Mixamo import; FindOrPrepareHumanoidClip re-applies Y/XZ/feet on rebuild.
+    private static readonly string[] MediumCheckClips = { "Mixamo_BodyCheck_Medium", "IH@GA_MoveStraightHeavyHit_01" };
     // Heavy uses a dedicated Mixamo delivery clip (Assets/Animation/Mixamo_BodyCheck_Heavy.fbx)
     // — bigger wound-up slam pose than the pack clip. Falls back to the pack clip if missing.
     // Already Humanoid + bake-into-pose ON per Mixamo import (see import walkthrough); the
@@ -188,14 +194,18 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         // Three check-delivery states, same clip, different playback speeds so the
         // visible wind-up matches the tier (snappy poke vs. wound-up slam).
         AnimatorState lightCheckState = CreateCheckState(rootStateMachine, "LightCheck", BodyCheckClips, 1.3f);
-        AnimatorState mediumCheckState = CreateCheckState(rootStateMachine, "MediumCheck", BodyCheckClips, 1.0f);
+        // Medium now uses its own Mixamo clip (not the pack stick-poke). Speed 1.25x:
+        // fast enough that the naturally-paced Mixamo clip doesn't read as sluggish, but
+        // deliberately slower than Heavy's 1.5x so the perfect-timing Heavy slam stays the
+        // visual king (the clip is an elbow strike that otherwise out-punches Heavy). Tune knob.
+        AnimatorState mediumCheckState = CreateCheckState(rootStateMachine, "MediumCheck", MediumCheckClips, 1.25f);
         // Heavy speed dialed UP (not down like the pack clip): the Mixamo delivery is
         // a longer, naturally-paced full-body action — playing it slow looks like wading
         // through molasses. To also cut the leading wind-up dead-frames, trim the
         // clip's Start/End range on Mixamo_BodyCheck_Heavy.fbx → Animation tab in the
         // Inspector (the Charging pose already shows the wind-up; the delivery should
         // start at the peak and crash forward into contact).
-        AnimatorState heavyCheckState = CreateCheckState(rootStateMachine, "HeavyCheck", HeavyCheckClips, 1.5f);
+        AnimatorState heavyCheckState = CreateCheckState(rootStateMachine, "HeavyCheck", HeavyCheckClips, 2.25f);
         // Three receiver reactions. Light and Medium share the same clip (forward_1)
         // since it's the only Humanoid impact with proper Y bake; Light plays at
         // 1.5x to read as a snappier flinch. Heavy has its own fall clip.
