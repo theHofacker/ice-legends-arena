@@ -416,7 +416,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.05, z: 0}
-  m_LocalScale: {x: 0.2, y: 0.1, z: 0.1}
+  m_LocalScale: {x: 0.13, y: 0.02, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -489,6 +489,10 @@ PrefabInstance:
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: c74f7b6a30fe00840b6cf8a97863dacc, type: 2}
+    - target: {fileID: 5866666021909216657, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_WarningMessage
+      value: 
+      objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: c9232e267490f1441a4873937444eb6b, type: 3}
       propertyPath: m_ApplyRootMotion
       value: 0
@@ -668,7 +672,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 200
-  field of view: 60
+  field of view: 27.4
   orthographic: 0
   orthographic size: 5
   m_Depth: 0
@@ -758,7 +762,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TestPuckFollowCamera
   puckTransform: {fileID: 0}
-  height: 20
+  height: 12.95
   backOffsetZ: 22
   lookAheadZ: 5
   followX: 0.7
@@ -855,10 +859,16 @@ MonoBehaviour:
   checkRange: 2.5
   checkCooldown: 1.00075
   lightChargeThreshold: 0.4
+  checkTapGracePeriod: 0.12
   animator: {fileID: 1572243147}
   characterData: {fileID: 0}
   chargeMoveSpeedFactor: 0.5
   shotPeakNormalizedTime: 0.128
+  shotContactNormalizedTime: 0.35
+  heavyCheckContactNormalizedTime: 0.25
+  mediumCheckContactNormalizedTime: 0
+  lightCheckContactNormalizedTime: 0
+  checkContactTimeout: 0.6
   logInput: 0
 --- !u!54 &1116581415
 Rigidbody:
@@ -940,12 +950,27 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StickAttacher
   stickPrefab: {fileID: 7162165873249720486, guid: b73c63e5a1f989f4793581ab5a99085f, type: 3}
+  mode: 0
+  stickScale: 0.75
+  topHandBone: 17
+  bottomHandBone: 18
+  flipShaft: 0
+  rollDegrees: -20.3
+  buttOffset: {x: 0, y: 0, z: 0.0001}
+  handGripFactor: 0.7
+  bottomHandShaftFraction: 0.35
+  bottomHandOffset: {x: 2.59, y: 0.55, z: 5.16}
   gripBone: 18
   fallbackBonePath: 
   gripPositionOffset: {x: 0.05, y: -0.1, z: 0.1}
   gripRotationOffset: {x: -30, y: 45, z: 30}
-  stickScale: 0.65
-  drawGizmo: 0
+  clampBladeToIce: 1
+  iceY: 0
+  bladeClearance: 0.01
+  maxClampAngle: 40
+  manualAdjust: 0
+  drawGizmo: 1
+  drawContactGizmo: 1
 --- !u!114 &1116581419
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1293,6 +1318,10 @@ PrefabInstance:
       propertyPath: m_Controller
       value: 
       objectReference: {fileID: 9100000, guid: c74f7b6a30fe00840b6cf8a97863dacc, type: 2}
+    - target: {fileID: 5866666021909216657, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_WarningMessage
+      value: 
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -1316,6 +1345,7 @@ GameObject:
   - component: {fileID: 1773543298}
   - component: {fileID: 1773543297}
   - component: {fileID: 1773543301}
+  - component: {fileID: 1773543302}
   m_Layer: 0
   m_Name: TestOpponent
   m_TagString: Untagged
@@ -1446,6 +1476,40 @@ MonoBehaviour:
   hudFontSize: 14
   hudScreenPos: {x: 10, y: 10}
   logStateChanges: 1
+--- !u!114 &1773543302
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1773543296}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cb7029ccb69cdb40ad0fd6371ed8953, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StickAttacher
+  stickPrefab: {fileID: 7162165873249720486, guid: b73c63e5a1f989f4793581ab5a99085f, type: 3}
+  mode: 0
+  stickScale: 0.75
+  topHandBone: 17
+  bottomHandBone: 18
+  flipShaft: 0
+  rollDegrees: -20.3
+  buttOffset: {x: 0, y: 0, z: 0.0001}
+  handGripFactor: 0.7
+  bottomHandShaftFraction: 0.35
+  bottomHandOffset: {x: 2.59, y: 0.55, z: 5.16}
+  gripBone: 18
+  fallbackBonePath: 
+  gripPositionOffset: {x: 0.05, y: -0.1, z: 0.1}
+  gripRotationOffset: {x: -30, y: 45, z: 30}
+  clampBladeToIce: 1
+  iceY: 0
+  bladeClearance: 0.01
+  maxClampAngle: 40
+  manualAdjust: 0
+  drawGizmo: 1
+  drawContactGizmo: 1
 --- !u!1 &1884286228
 GameObject:
   m_ObjectHideFlags: 0
@@ -1463,7 +1527,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1884286229
 Transform:
   m_ObjectHideFlags: 0

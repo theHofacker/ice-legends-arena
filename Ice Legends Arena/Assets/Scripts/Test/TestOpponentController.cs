@@ -117,6 +117,7 @@ public class TestOpponentController : MonoBehaviour
     private Transform puckTransform;
     private Rigidbody puckRb;
     private Transform playerTransform;
+    private StickAttacher opponentStick;   // null if no bone-attached stick — SkateWithPuck falls back to the legacy stickOffset follow
     private bool hasPuck = false;
     private bool isStunned = false;
     private float stunTimer = 0f;
@@ -201,6 +202,16 @@ public class TestOpponentController : MonoBehaviour
                 animator.gameObject.AddComponent<FootIKController>();
             }
         }
+
+        // Pin the carried puck to a bone-attached blade if this opponent has a stick,
+        // mirroring the player's blade-pin in TestPuckController. SkateWithPuck falls
+        // back to the legacy stickOffset follow when no StickAttacher is present, so
+        // this auto-activates the moment a Hockey_Stick + StickAttacher is added to the
+        // opponent Y Bot — no further wiring needed.
+        opponentStick = GetComponentInChildren<StickAttacher>();
+        Debug.Log(opponentStick != null
+            ? $"TestOpponent: pinning carried puck to blade on {opponentStick.name}"
+            : "TestOpponent: legacy stickOffset puck follow (no StickAttacher)");
 
         // Apply team color to all mesh renderers in children
         ApplyTeamColor();
@@ -398,7 +409,18 @@ public class TestOpponentController : MonoBehaviour
         // (vel / puckFollowSpeed) so the puck settles AT the stick tip while skating
         // rather than trailing behind it — same compensation as TestPuckController.
         Vector3 leadVel = PhysicsHelper.FlattenY(rb.linearVelocity);
-        Vector3 puckTarget = transform.position + dirToGoal * stickOffset + leadVel / puckFollowSpeed;
+        Vector3 puckTarget;
+        if (opponentStick != null)
+        {
+            // Animator-driven stick: pin to the actual blade contact point so the puck
+            // tracks the carry/skate clips, exactly like the player's TestPuckController path.
+            puckTarget = opponentStick.GetBladeContactPoint() + leadVel / puckFollowSpeed;
+        }
+        else
+        {
+            // Legacy fallback: fixed offset ahead of the opponent toward the goal.
+            puckTarget = transform.position + dirToGoal * stickOffset + leadVel / puckFollowSpeed;
+        }
         puckTarget.y = 0.05f;
         puckRb.MovePosition(Vector3.Lerp(puckRb.position, puckTarget, puckFollowSpeed * Time.deltaTime));
         puckRb.linearVelocity = Vector3.zero;
