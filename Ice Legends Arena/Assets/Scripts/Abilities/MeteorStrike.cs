@@ -32,17 +32,38 @@ public class MeteorStrike : Ability
     [SerializeField] private AudioClip impactSound;
 
     [Header("Timing")]
-    [Tooltip("Delay before meteor impacts (warning time)")]
+    [Tooltip("Delay before meteor impacts (warning time). Also the fall duration: the " +
+             "meteor descends from meteorSpawnHeight to the ground over this window.")]
     [Range(0.3f, 2f)]
     [SerializeField] private float impactDelay = 0.8f;
+
+    [Tooltip("Height (m) above the target the meteor spawns and falls from over impactDelay. " +
+             "Requires meteorPrefab assigned (e.g. Projectile_Fire_LWRP from the Spells Pack).")]
+    [Range(3f, 40f)]
+    [SerializeField] private float meteorSpawnHeight = 18f;
 
     [Header("Targeting")]
     [Tooltip("How far behind the player to drop the meteor (for catching pursuers)")]
     [Range(0f, 3f)]
     [SerializeField] private float dropBehindDistance = 1f;
 
+    [Header("Cast Animation")]
+    [Tooltip("Normalized time (0-1) within the SpellCast clip where the caster thrusts " +
+             "their hands forward. The meteor sequence (warning -> fall -> impact) begins " +
+             "at this frame so it syncs with the visible cast, mirroring the shot/check " +
+             "contact-sync pattern. SpellCast spans frames 2-68; the thrust lands ~mid-clip.")]
+    [Range(0.05f, 0.9f)]
+    [SerializeField] private float castContactNormalizedTime = 0.4f;
+
+    [Tooltip("Failsafe (s): if the SpellCast state never reaches its contact frame within " +
+             "this window (animator not rebuilt, cast interrupted), fire the strike anyway.")]
+    [Range(0.2f, 2f)]
+    [SerializeField] private float castContactTimeout = 1f;
+
     // Cached reference to PlayerManager
     private PlayerManager playerManager;
+
+    private static readonly int CastHash = Animator.StringToHash("Cast");
 
     protected override void Awake()
     {
@@ -58,11 +79,76 @@ public class MeteorStrike : Ability
 
     protected override void ActivateAbility()
     {
-        Vector3 targetPosition = GetTargetPosition();
-        Debug.Log($"Meteor Strike activated at {targetPosition}! (Player at {GetPlayerPosition()})");
+        Debug.Log($"Meteor Strike activated! (Player at {GetPlayerPosition()})");
 
-        // Start the meteor strike sequence (warning -> impact -> stun)
-        StartCoroutine(MeteorStrikeSequence(targetPosition));
+        // Play the cast animation and defer the strike to its thrust frame so the meteor
+        // syncs with the visible cast (mirrors the shot/check contact-sync). If the player
+        // has no animator or the controller predates the Cast trigger (not rebuilt), fall
+        // back to firing the sequence immediately.
+        GameObject player = GetControlledPlayer();
+        Animator anim = player != null ? player.GetComponentInChildren<Animator>() : null;
+
+        if (anim != null && HasCastParam(anim))
+        {
+            anim.SetTrigger(CastHash);
+            StartCoroutine(CastThenStrike(anim));
+        }
+        else
+        {
+            if (anim == null)
+                Debug.LogWarning("MeteorStrike: no Animator on controlled player — firing strike without a cast animation.");
+            else
+                Debug.LogWarning("MeteorStrike: animator has no 'Cast' trigger (rebuild HockeyPlayerAnimator) — firing strike without a cast animation.");
+            StartCoroutine(MeteorStrikeSequence(GetTargetPosition()));
+        }
+    }
+
+    /// <summary>
+    /// True if the animator exposes the "Cast" trigger added by HockeyAnimatorBuilder.
+    /// Guards SetTrigger so we don't spam errors on an un-rebuilt controller.
+    /// </summary>
+    private static bool HasCastParam(Animator anim)
+    {
+        foreach (AnimatorControllerParameter p in anim.parameters)
+        {
+            if (p.type == AnimatorControllerParameterType.Trigger && p.name == "Cast")
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Waits for the SpellCast clip to reach its thrust frame (castContactNormalizedTime),
+    /// then launches the meteor sequence. Bails early if the cast state is interrupted, and
+    /// has a hard timeout failsafe so a missing/replaced state can't swallow the ability.
+    /// Target is resolved at the contact frame so "drop behind" uses the position the
+    /// player has skated to by the time the cast lands.
+    /// </summary>
+    private IEnumerator CastThenStrike(Animator anim)
+    {
+        float timeRemaining = castContactTimeout;
+        bool enteredCast = false;
+
+        while (timeRemaining > 0f)
+        {
+            AnimatorStateInfo info = anim.GetCurrentAnimatorStateInfo(0);
+            if (info.IsName("SpellCast"))
+            {
+                enteredCast = true;
+                if (info.normalizedTime >= castContactNormalizedTime)
+                    break;
+            }
+            else if (enteredCast)
+            {
+                // Was in SpellCast and left it (interrupted by a hit, etc.) — strike now.
+                break;
+            }
+
+            timeRemaining -= Time.deltaTime;
+            yield return null;
+        }
+
+        StartCoroutine(MeteorStrikeSequence(GetTargetPosition()));
     }
 
     /// <summary>
@@ -87,16 +173,55 @@ public class MeteorStrike : Ability
         {
             return playerManager.CurrentPlayer;
         }
+        // Test scene (1v1) has no PlayerManager — use the simplified test controller.
+        TestPlayerController testPlayer = FindAnyObjectByType<TestPlayerController>();
+        if (testPlayer != null)
+        {
+            return testPlayer.gameObject;
+        }
         // Fallback: find any player
         return GameObject.FindGameObjectWithTag("Player");
     }
 
     /// <summary>
-    /// Get target position for meteor - drops behind player to catch pursuers
-    /// Perfect for creating breakaways!
+    /// Finds the opponent nearest the controlled player (test scene first, then gameplay
+    /// AIController). Returns its ice-level position. False if there are no opponents.
+    /// </summary>
+    private bool TryGetNearestOpponent(out Vector3 position)
+    {
+        position = Vector3.zero;
+        float bestDist = float.MaxValue;
+        bool found = false;
+        Vector3 origin = GetPlayerPosition();
+
+        foreach (TestOpponentController opp in FindObjectsByType<TestOpponentController>(FindObjectsSortMode.None))
+        {
+            float d = PhysicsHelper.DistanceXZ(opp.transform.position, origin);
+            if (d < bestDist) { bestDist = d; position = opp.transform.position; found = true; }
+        }
+        foreach (AIController opp in FindObjectsByType<AIController>(FindObjectsSortMode.None))
+        {
+            float d = PhysicsHelper.DistanceXZ(opp.transform.position, origin);
+            if (d < bestDist) { bestDist = d; position = opp.transform.position; found = true; }
+        }
+
+        if (found) position.y = 0f;
+        return found;
+    }
+
+    /// <summary>
+    /// Where the meteor lands. Primary: the nearest opponent (offensive zone strike that
+    /// knocks them down). Fallback when no opponent exists: drop behind the moving player
+    /// to catch pursuers / spring a breakaway (the original design intent).
     /// </summary>
     private Vector3 GetTargetPosition()
     {
+        if (TryGetNearestOpponent(out Vector3 opponentPos))
+        {
+            Debug.Log($"MeteorStrike targeting nearest opponent at {opponentPos}");
+            return opponentPos;
+        }
+
         GameObject controlledPlayer = GetControlledPlayer();
         if (controlledPlayer == null)
         {
@@ -130,20 +255,36 @@ public class MeteorStrike : Ability
     /// </summary>
     private IEnumerator MeteorStrikeSequence(Vector3 targetPosition)
     {
-        // Phase 1: Show warning indicator
-        GameObject warningIndicator = CreateWarningIndicator(targetPosition);
+        Vector3 impactPoint = new Vector3(targetPosition.x, 0f, targetPosition.z);
 
-        // Wait for impact
-        yield return new WaitForSeconds(impactDelay);
+        // Phase 1: ground telegraph + spawn the falling meteor high above the impact point.
+        GameObject warningIndicator = CreateWarningIndicator(impactPoint);
 
-        // Phase 2: Destroy warning, create explosion
-        if (warningIndicator != null)
-            Destroy(warningIndicator);
+        GameObject meteor = null;
+        Vector3 meteorStart = impactPoint + Vector3.up * meteorSpawnHeight;
+        if (meteorPrefab != null)
+        {
+            // Point the prefab's forward down the fall path (most projectile VFX emit along +Z).
+            Quaternion fallRot = Quaternion.LookRotation((impactPoint - meteorStart).normalized);
+            meteor = Instantiate(meteorPrefab, meteorStart, fallRot);
+        }
 
-        SpawnMeteorExplosion(targetPosition);
+        // Phase 2: descend over impactDelay so the crash lands on the telegraph.
+        float elapsed = 0f;
+        while (elapsed < impactDelay)
+        {
+            elapsed += Time.deltaTime;
+            if (meteor != null)
+                meteor.transform.position = Vector3.Lerp(meteorStart, impactPoint, elapsed / impactDelay);
+            yield return null;
+        }
 
-        // Phase 3: Stun nearby opponents
-        StunNearbyOpponents(targetPosition);
+        // Phase 3: land — clear telegraph + meteor, explode, knock down opponents in radius.
+        if (warningIndicator != null) Destroy(warningIndicator);
+        if (meteor != null) Destroy(meteor);
+
+        SpawnMeteorExplosion(impactPoint);
+        StunNearbyOpponents(impactPoint);
     }
 
     /// <summary>
@@ -291,26 +432,44 @@ public class MeteorStrike : Ability
     }
 
     /// <summary>
-    /// Stun all opponents within explosion radius
+    /// Knock down / stun all opponents within the explosion radius.
+    /// Test scene: reuse the Heavy-check fall via GetBodyChecked, with knockback radiating
+    /// outward from the blast center so bodies are thrown away from the impact — no new
+    /// opponent code needed, and the knockdown reads as a real meteor hit.
+    /// Gameplay scene: fall back to AIController.Stun (original behavior).
     /// </summary>
     private void StunNearbyOpponents(Vector3 position)
     {
-        AIController[] opponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
-        int stunnedCount = 0;
+        int hitCount = 0;
 
-        foreach (AIController opponent in opponents)
+        // --- Test-scene opponents: radial knockdown via the existing Heavy fall ---
+        TestOpponentController[] testOpponents = FindObjectsByType<TestOpponentController>(FindObjectsSortMode.None);
+        foreach (TestOpponentController opponent in testOpponents)
+        {
+            if (opponent.IsStunned) continue; // don't restart a fall mid-recovery
+            float distance = PhysicsHelper.DistanceXZ(opponent.transform.position, position);
+            if (distance > explosionRadius) continue;
+
+            // Direction FROM the blast center TO the opponent = outward push.
+            Vector3 outward = PhysicsHelper.DirectionXZ(position, opponent.transform.position);
+            if (outward.sqrMagnitude < 0.0001f) outward = opponent.transform.forward; // dead-center safety
+            opponent.GetBodyChecked(TestOpponentController.CheckTier.Heavy, outward);
+            hitCount++;
+        }
+
+        // --- Gameplay-scene opponents: original stun system ---
+        AIController[] aiOpponents = FindObjectsByType<AIController>(FindObjectsSortMode.None);
+        foreach (AIController opponent in aiOpponents)
         {
             float distance = PhysicsHelper.DistanceXZ(opponent.transform.position, position);
-
             if (distance <= explosionRadius)
             {
-                // Use the new stun system
                 opponent.Stun(stunDuration);
-                stunnedCount++;
+                hitCount++;
             }
         }
 
-        Debug.Log($"Meteor Strike stunned {stunnedCount} opponents!");
+        Debug.Log($"Meteor Strike hit {hitCount} opponents!");
     }
 
     /// <summary>

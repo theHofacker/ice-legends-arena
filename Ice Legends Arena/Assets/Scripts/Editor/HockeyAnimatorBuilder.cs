@@ -15,7 +15,11 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     // Extra folder for in-house / Mixamo clips that aren't part of the ICE_HOCKEY pack.
     // Searched alongside AnimationsFolder by FindAnimationClip and LoadAvatarFromClipNamed.
     private const string ExtraAnimationsFolder = "Assets/Animation";
-    private static readonly string[] AnimationSearchFolders = { AnimationsFolder, ExtraAnimationsFolder };
+    // Blink (Dissolve FX Master Kit) ships a starter-pack humanoid "magic attack" clip
+    // reused as the ability cast pose (SpellCast). Searched so SpellCastClips resolves
+    // without copying the FBX out of the pack.
+    private const string BlinkCombatFolder = "Assets/Blink/Art/Animations/Animations_Starter_Pack/Combat";
+    private static readonly string[] AnimationSearchFolders = { AnimationsFolder, ExtraAnimationsFolder, BlinkCombatFolder };
     private const string OutputPath = "Assets/Animation/HockeyPlayerAnimator.controller";
 
     // Animation clip names to search for (prefix patterns from the ICE_HOCKEY pack)
@@ -85,6 +89,13 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     private static readonly string[] BoardGetUpClips = { "IH@Hit_getup_front" };
     private static readonly string[] CelebrationClips = { "IH@Celebration_02" };
     private static readonly string[] BlockClips = { "IH@GA_BLockStraight" };
+    // Ability cast pose — Blink starter-pack humanoid "magic attack" (SpellCast sub-clip
+    // on SpellCast.fbx, frames 2-68: windup → thrust → recovery). Already Humanoid, so it
+    // retargets to the Y Bot directly. Played once via the Cast trigger, then exits to
+    // Idle. Ability scripts (e.g. MeteorStrike) watch this state's normalizedTime to spawn
+    // their VFX on the thrust frame. Fallback to the celebration gesture so a missing
+    // Blink clip can't break the controller build.
+    private static readonly string[] SpellCastClips = { "SpellCast", "IH@Celebration_02" };
     // Wind-up pose held while charging a CHECK. The Charging state is only entered
     // when ChargeIntent == 2 (Check) — shots never come here; the Shoot state freezes
     // itself at peak via ShotSpeed=0 instead. So this clip needs to match the body
@@ -155,6 +166,10 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         controller.AddParameter("ChargeIntent", AnimatorControllerParameterType.Int);
         controller.AddParameter("Celebrate", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("Block", AnimatorControllerParameterType.Trigger);
+        // Ability cast trigger — fires the SpellCast state. Set by ability controllers
+        // (TestAbilityController → Ability.TryActivateAbility → MeteorStrike). The ability
+        // watches SpellCast's normalizedTime to contact-sync its VFX to the thrust frame.
+        controller.AddParameter("Cast", AnimatorControllerParameterType.Trigger);
 
         // Get the base layer state machine
         AnimatorStateMachine rootStateMachine = controller.layers[0].stateMachine;
@@ -238,6 +253,8 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         boardGetUpState.iKOnFeet = true;
         AnimatorState celebrationState = CreateState(rootStateMachine, "Celebration", CelebrationClips, false);
         AnimatorState blockState = CreateState(rootStateMachine, "Block", BlockClips, false);
+        // Ability cast (one-shot). In-place clip, no root motion to bake, so plain CreateState.
+        AnimatorState spellCastState = CreateState(rootStateMachine, "SpellCast", SpellCastClips, false);
         // Wind-up state — plays the wind-up sub-clip once, then holds the last frame
         // until release. With the new Mixamo_BodyCheck_Heavy_WindUp clip the player
         // visibly raises the stick to chest position during the held charge instead
@@ -309,6 +326,19 @@ public class HockeyAnimatorBuilder : MonoBehaviour
         shootToIdle.hasExitTime = true;
         shootToIdle.exitTime = 0.9f;
         shootToIdle.duration = 0.15f;
+
+        // Any State -> SpellCast (Cast trigger). Ability casts (MeteorStrike etc.) fire this.
+        AnimatorStateTransition anyToCast = rootStateMachine.AddAnyStateTransition(spellCastState);
+        anyToCast.AddCondition(AnimatorConditionMode.If, 0, "Cast");
+        anyToCast.hasExitTime = false;
+        anyToCast.duration = 0.1f;
+        anyToCast.canTransitionToSelf = false;
+
+        // SpellCast -> Idle (after the cast finishes)
+        AnimatorStateTransition castToIdle = spellCastState.AddTransition(idleState);
+        castToIdle.hasExitTime = true;
+        castToIdle.exitTime = 0.9f;
+        castToIdle.duration = 0.15f;
 
         // Any State -> tier-specific check (BodyCheck trigger + HitTier int).
         // Caller must set HitTier BEFORE setting the trigger or the wrong state plays.

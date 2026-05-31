@@ -833,6 +833,8 @@ GameObject:
   - component: {fileID: 1116581414}
   - component: {fileID: 1116581418}
   - component: {fileID: 1116581419}
+  - component: {fileID: 1116581421}
+  - component: {fileID: 1116581420}
   m_Layer: 0
   m_Name: TestPlayer
   m_TagString: Player
@@ -989,6 +991,46 @@ MonoBehaviour:
   yellowZoneMultiplier: 0.8
   greenZoneMultiplier: 2
   redZoneMultiplier: 0.6
+--- !u!114 &1116581420
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c38907f3cd78944aab0bf60e2c57ea6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestAbilityController
+  ability: {fileID: 1116581421}
+  activationKey: 31
+--- !u!114 &1116581421
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24874524092cd824d8688b4eb15d7309, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MeteorStrike
+  abilityData: {fileID: 0}
+  isOnCooldown: 0
+  cooldownRemaining: 0
+  meteorPrefab: {fileID: 1485987801625442810, guid: 27ecca73bc94c814da0bd66e81effa5e, type: 3}
+  explosionRadius: 5
+  stunDuration: 2
+  damage: 25
+  explosionEffect: {fileID: 7156317333231045241, guid: 72c05ae926a66ce4fb948cce6721bc75, type: 3}
+  impactSound: {fileID: 0}
+  impactDelay: 0.8
+  meteorSpawnHeight: 18
+  dropBehindDistance: 1
+  castContactNormalizedTime: 0.4
+  castContactTimeout: 1
 --- !u!1 &1459536127
 GameObject:
   m_ObjectHideFlags: 0
