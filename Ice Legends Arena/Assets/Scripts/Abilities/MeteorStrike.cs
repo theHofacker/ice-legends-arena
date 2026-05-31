@@ -87,11 +87,12 @@ public class MeteorStrike : Ability
         // back to firing the sequence immediately.
         GameObject player = GetControlledPlayer();
         Animator anim = player != null ? player.GetComponentInChildren<Animator>() : null;
+        StickAttacher stick = player != null ? player.GetComponentInChildren<StickAttacher>() : null;
 
         if (anim != null && HasCastParam(anim))
         {
             anim.SetTrigger(CastHash);
-            StartCoroutine(CastThenStrike(anim));
+            StartCoroutine(CastThenStrike(anim, stick));
         }
         else
         {
@@ -124,17 +125,24 @@ public class MeteorStrike : Ability
     /// Target is resolved at the contact frame so "drop behind" uses the position the
     /// player has skated to by the time the cast lands.
     /// </summary>
-    private IEnumerator CastThenStrike(Animator anim)
+    private IEnumerator CastThenStrike(Animator anim, StickAttacher stick)
     {
         float timeRemaining = castContactTimeout;
         bool enteredCast = false;
 
+        // Phase A: wait for the cast's thrust frame (with failsafe). On entering SpellCast,
+        // free the left hand so the stick swings one-handed like a sword (the right-hand
+        // swing already lands with the meteor impact).
         while (timeRemaining > 0f)
         {
             AnimatorStateInfo info = anim.GetCurrentAnimatorStateInfo(0);
             if (info.IsName("SpellCast"))
             {
-                enteredCast = true;
+                if (!enteredCast)
+                {
+                    enteredCast = true;
+                    if (stick != null) stick.LockTopHandToBottom();
+                }
                 if (info.normalizedTime >= castContactNormalizedTime)
                     break;
             }
@@ -149,6 +157,19 @@ public class MeteorStrike : Ability
         }
 
         StartCoroutine(MeteorStrikeSequence(GetTargetPosition()));
+
+        if (!enteredCast) yield break; // never cast (no anim / interrupted) — nothing to release
+
+        // Phase B: hold the one-handed grip until the cast clip exits, then restore two-hand
+        // tracking. Capped so a missed state-exit can't strand the stick in the right hand.
+        float holdTimeout = 4f;
+        while (holdTimeout > 0f)
+        {
+            if (!anim.GetCurrentAnimatorStateInfo(0).IsName("SpellCast")) break;
+            holdTimeout -= Time.deltaTime;
+            yield return null;
+        }
+        if (stick != null) stick.ReleaseTopHandLock();
     }
 
     /// <summary>

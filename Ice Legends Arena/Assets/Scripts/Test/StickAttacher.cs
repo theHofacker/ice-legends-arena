@@ -126,6 +126,15 @@ public class StickAttacher : MonoBehaviour
     private float shaftAlong;            // half-length along that axis
     private Vector3 shaftBoundsCenter;   // localBounds center
 
+    // Top-hand lock (for one-handed casts like MeteorStrike's sword swing). When engaged,
+    // the top (left) hand stops driving the stick: its grip point is frozen as a fixed
+    // offset in the bottom (right) hand's local space, captured at lock time. The shaft then
+    // rides rigidly with the right hand — the swing stays identical to the two-handed grip,
+    // but the left hand is free to follow the animation (it "lets go" of the stick). Used by
+    // the two- and right-hand alignment paths; SingleHandOffset already ignores the top hand.
+    private bool topHandLocked = false;
+    private Vector3 lockedTopInBottomLocal;
+
     private void Start()
     {
         if (stickPrefab == null)
@@ -285,6 +294,46 @@ public class StickAttacher : MonoBehaviour
     }
 
     /// <summary>
+    /// Frees the top (left) hand from the stick: captures the current top-hand grip point as
+    /// a fixed offset in the bottom (right) hand's local space, so from now on the shaft is
+    /// oriented by the right hand alone and the left hand can move independently. Call when a
+    /// one-handed cast/swing begins (e.g. MeteorStrike's SpellCast). No-op in SingleHandOffset
+    /// mode (already one-handed) or before the bones resolve. Idempotent.
+    /// </summary>
+    public void LockTopHandToBottom()
+    {
+        if (topHandLocked) return;
+        if (bottomHandT == null || topHandT == null) return;
+        lockedTopInBottomLocal = bottomHandT.InverseTransformPoint(GripPointWorld(topHandT));
+        topHandLocked = true;
+    }
+
+    /// <summary>Restores normal two-hand tracking (the left hand drives the stick again).</summary>
+    public void ReleaseTopHandLock()
+    {
+        topHandLocked = false;
+    }
+
+    /// <summary>
+    /// The top-hand grip point used by the alignment math. When locked, it's the captured
+    /// offset rigidly following the bottom (right) hand; otherwise the live left-hand grip.
+    /// </summary>
+    private Vector3 TopGripWorld()
+    {
+        if (topHandLocked && bottomHandT != null)
+            return bottomHandT.TransformPoint(lockedTopInBottomLocal);
+        return GripPointWorld(topHandT);
+    }
+
+    /// <summary>Blade-roll reference bone's up axis — follows the right hand while locked so the
+    /// blade face stays stable as the freed left hand moves.</summary>
+    private Vector3 RefBoneUp()
+    {
+        if (topHandLocked && bottomHandT != null) return bottomHandT.up;
+        return topHandT != null ? topHandT.up : transform.up;
+    }
+
+    /// <summary>
     /// Sets localScale so the stick's *world* size equals stickScale, compensating for
     /// parent (Mixamo bone) lossyScale, which is often ~0.01 and would shrink it away.
     /// </summary>
@@ -305,7 +354,7 @@ public class StickAttacher : MonoBehaviour
     /// </summary>
     private void ApplyTwoHandAlignment()
     {
-        Vector3 top = GripPointWorld(topHandT);
+        Vector3 top = TopGripWorld();
         Vector3 bottom = GripPointWorld(bottomHandT);
         Vector3 shaftDir = bottom - top;          // butt → blade direction in world
         if (shaftDir.sqrMagnitude < 1e-8f) return;
@@ -336,7 +385,7 @@ public class StickAttacher : MonoBehaviour
     /// </summary>
     private void ApplyRightHandPrimary()
     {
-        Vector3 left = GripPointWorld(topHandT);       // aim target
+        Vector3 left = TopGripWorld();                 // aim target (frozen to right hand when locked)
         Vector3 right = GripPointWorld(bottomHandT);   // anchor
         Vector3 shaftDir = right - left;               // butt → blade direction in world
         if (shaftDir.sqrMagnitude < 1e-8f) return;
@@ -382,7 +431,7 @@ public class StickAttacher : MonoBehaviour
         // Player-frame reference: the top hand bone's "up" axis. Rotates with the player so
         // the blade orientation stays consistent under player rotation. Fall back to the
         // player-root and finally world up if either is degenerate against shaftDir.
-        Vector3 refWorld = topHandT != null ? topHandT.up : transform.up;
+        Vector3 refWorld = RefBoneUp();
         Vector3 perpRef = Vector3.ProjectOnPlane(refWorld, shaftDir);
         if (perpRef.sqrMagnitude < 1e-4f)
         {

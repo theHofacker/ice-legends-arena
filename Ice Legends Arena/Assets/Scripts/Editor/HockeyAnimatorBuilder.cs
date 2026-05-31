@@ -89,13 +89,14 @@ public class HockeyAnimatorBuilder : MonoBehaviour
     private static readonly string[] BoardGetUpClips = { "IH@Hit_getup_front" };
     private static readonly string[] CelebrationClips = { "IH@Celebration_02" };
     private static readonly string[] BlockClips = { "IH@GA_BLockStraight" };
-    // Ability cast pose — Blink starter-pack humanoid "magic attack" (SpellCast sub-clip
-    // on SpellCast.fbx, frames 2-68: windup → thrust → recovery). Already Humanoid, so it
-    // retargets to the Y Bot directly. Played once via the Cast trigger, then exits to
-    // Idle. Ability scripts (e.g. MeteorStrike) watch this state's normalizedTime to spawn
-    // their VFX on the thrust frame. Fallback to the celebration gesture so a missing
-    // Blink clip can't break the controller build.
-    private static readonly string[] SpellCastClips = { "SpellCast", "IH@Celebration_02" };
+    // Ability cast pose. Primary: the user's Mixamo "Meteor Strike Spell Casting" clip
+    // (Assets/Animation; Humanoid, one-shot, frames 0-89). Its sub-clip is the default
+    // "mixamo.com", so it resolves by FILENAME via Pass 1 — the search string IS the file
+    // basename (spaces and all). Falls back to the Blink starter-pack "SpellCast" sub-clip,
+    // then the celebration gesture, so the controller always builds. Played once via the
+    // Cast trigger, exits to Idle; MeteorStrike watches this state's normalizedTime to
+    // spawn its VFX on the thrust frame (retune castContactNormalizedTime for this clip).
+    private static readonly string[] SpellCastClips = { "Meteor Strike Spell Casting", "SpellCast", "IH@Celebration_02" };
     // Wind-up pose held while charging a CHECK. The Charging state is only entered
     // when ChargeIntent == 2 (Check) — shots never come here; the Shoot state freezes
     // itself at peak via ShotSpeed=0 instead. So this clip needs to match the body
