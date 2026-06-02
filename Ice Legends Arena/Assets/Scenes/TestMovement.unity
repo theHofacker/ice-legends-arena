@@ -766,7 +766,7 @@ MonoBehaviour:
   backOffsetZ: 22
   lookAheadZ: 5
   followX: 0.7
-  followZ: 0.6
+  followZ: 1
   smoothSpeed: 6
   predictiveFollow: 1
   predictionAmount: 0.3
