@@ -60,6 +60,17 @@ public class MeteorStrike : Ability
     [Range(0.2f, 2f)]
     [SerializeField] private float castContactTimeout = 1f;
 
+    [Header("Cast Hand VFX")]
+    [Tooltip("Optional flame spawned at the casting (right) hand while SpellCast plays, to sell " +
+             "the summon (e.g. Casting_Fire_LWRP_Mobile). Parented to the right-hand bone and " +
+             "destroyed when the cast ends.")]
+    [SerializeField] private GameObject castHandEffect;
+
+    [Tooltip("World-space scale for the cast-hand effect. The Mixamo hand bone is tiny (~0.01), " +
+             "so the spawn counter-scales the bone's lossyScale to reach this size.")]
+    [Range(0.1f, 5f)]
+    [SerializeField] private float castEffectScale = 1f;
+
     // Cached reference to PlayerManager
     private PlayerManager playerManager;
 
@@ -129,10 +140,11 @@ public class MeteorStrike : Ability
     {
         float timeRemaining = castContactTimeout;
         bool enteredCast = false;
+        GameObject handFx = null;
 
         // Phase A: wait for the cast's thrust frame (with failsafe). On entering SpellCast,
         // free the left hand so the stick swings one-handed like a sword (the right-hand
-        // swing already lands with the meteor impact).
+        // swing already lands with the meteor impact), and light up the casting hand.
         while (timeRemaining > 0f)
         {
             AnimatorStateInfo info = anim.GetCurrentAnimatorStateInfo(0);
@@ -142,6 +154,7 @@ public class MeteorStrike : Ability
                 {
                     enteredCast = true;
                     if (stick != null) stick.LockTopHandToBottom();
+                    handFx = SpawnCastHandEffect(anim);
                 }
                 if (info.normalizedTime >= castContactNormalizedTime)
                     break;
@@ -170,6 +183,29 @@ public class MeteorStrike : Ability
             yield return null;
         }
         if (stick != null) stick.ReleaseTopHandLock();
+        if (handFx != null) Destroy(handFx);
+    }
+
+    /// <summary>
+    /// Spawns castHandEffect parented to the player's right-hand bone, counter-scaled so the
+    /// tiny Mixamo bone scale (~0.01) doesn't shrink the VFX away. Returns null if no effect is
+    /// assigned or the bone can't be resolved; the caller destroys it when the cast ends.
+    /// </summary>
+    private GameObject SpawnCastHandEffect(Animator anim)
+    {
+        if (castHandEffect == null) return null;
+        Transform hand = anim.GetBoneTransform(HumanBodyBones.RightHand);
+        if (hand == null) return null;
+
+        GameObject fx = Instantiate(castHandEffect, hand);
+        fx.transform.localPosition = Vector3.zero;
+        fx.transform.localRotation = Quaternion.identity;
+        Vector3 ls = hand.lossyScale;
+        fx.transform.localScale = new Vector3(
+            ls.x != 0f ? castEffectScale / ls.x : castEffectScale,
+            ls.y != 0f ? castEffectScale / ls.y : castEffectScale,
+            ls.z != 0f ? castEffectScale / ls.z : castEffectScale);
+        return fx;
     }
 
     /// <summary>

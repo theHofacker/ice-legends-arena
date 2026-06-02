@@ -1031,6 +1031,8 @@ MonoBehaviour:
   dropBehindDistance: 1
   castContactNormalizedTime: 0.4
   castContactTimeout: 1
+  castHandEffect: {fileID: 6881474406348169789, guid: 1383858474c74aa3b30fc21325104e70, type: 3}
+  castEffectScale: 1
 --- !u!1 &1459536127
 GameObject:
   m_ObjectHideFlags: 0
