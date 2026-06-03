@@ -70,6 +70,17 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.02f, 0.9f)]
     public float shotContactNormalizedTime = 0.35f;
 
+    [Header("Shot Overcharge")]
+    [Tooltip("Normalized charge units past the green zone over which an overcharged shot's POWER " +
+             "decays from full (green) down to the floor. Small = a hair late still rips; you have " +
+             "to badly overhold to dribble it. The shot also sails high + wide (handled on the puck).")]
+    [Range(0.1f, 1f)]
+    public float overchargePowerFalloffRange = 0.5f;
+
+    [Tooltip("Power multiplier floor a badly-overcharged shot decays to (replaces the old flat 0.6 cliff).")]
+    [Range(0.2f, 1f)]
+    public float overchargeMinPowerMul = 0.6f;
+
     [Header("Body Check Contact")]
     [Tooltip("Normalized time (0-1) within the HeavyCheck clip where the stick visibly contacts the opponent. The knockback impulse applies at this frame (not on F release), so the opponent flies in sync with the visible swing-through. Set to 0 to keep the old instant-on-release behavior.")]
     [Range(0f, 0.9f)]
@@ -138,7 +149,9 @@ public class TestPlayerController : MonoBehaviour
     // The puck stays possessed (riding the stick) through the forward swing until then.
     private bool isAwaitingContact = false;
     private float pendingShotPower = 0f;
-    private bool pendingShotOvercharged = false;
+    // Normalized charge (hold time / charge duration) at release — drives the puck's continuous
+    // loft and overcharge wide-spray. Can exceed 1.0 when overheld.
+    private float pendingShotChargeNormalized = 0f;
 
     private TestPuckController puckCtrl;
 
@@ -325,6 +338,19 @@ public class TestPlayerController : MonoBehaviour
             TimingMeter.TimingResult result = timingMeter.StopCharging();
             float timingMul = timingMeter.GetPowerMultiplier(result);
             float charStat = (characterData != null) ? characterData.shotPower : 1f;
+            float chargeNorm = timingMeter.NormalizedCharge; // valid post-Stop (currentCharge isn't reset)
+
+            // Overcharge: held past the green window. Instead of the flat red-zone cliff, decay
+            // power gradually from full (green) toward overchargeMinPowerMul the longer it's held,
+            // so a split-second-late shot still rips (it just sails high/wide — handled on the puck)
+            // and only a badly-late one dribbles.
+            if (result == TimingMeter.TimingResult.Overcharged)
+            {
+                float over = chargeNorm - timingMeter.GreenZoneEnd;            // how far past green
+                float decay = Mathf.Clamp01(over / overchargePowerFalloffRange);
+                timingMul = Mathf.Lerp(timingMeter.GetPowerMultiplier(TimingMeter.TimingResult.Perfect),
+                                       overchargeMinPowerMul, decay);
+            }
 
             // Unfreeze the Shoot state so the rest of the slap-shot plays through.
             // ChargeIntent reset so the Charging state isn't triggered by stale state.
@@ -338,14 +364,15 @@ public class TestPlayerController : MonoBehaviour
             // Lock the shot power now (timing is judged at release) but DON'T launch
             // yet — defer to the stick-contact frame so the puck flies in sync with the
             // visible swing-through. The puck stays possessed and rides the stick until
-            // the contact-frame check below fires it. Final = base × character stat × timing zone;
-            // Overcharged sprays the puck off-axis (issue #10's "puck goes wide" spec).
+            // the contact-frame check below fires it. Final power = character stat × timing (green
+            // = full, overcharge = decayed above). Loft + overcharge wide-spray ride the puck off
+            // the normalized charge we pass through.
             pendingShotPower = timingMul * charStat;
-            pendingShotOvercharged = result == TimingMeter.TimingResult.Overcharged;
+            pendingShotChargeNormalized = chargeNorm;
             isAwaitingContact = true;
 
             if (logInput)
-                Debug.Log($"[TestPlayer] Shot released result={result} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={pendingShotPower:F2} (launch deferred to contact frame)");
+                Debug.Log($"[TestPlayer] Shot released result={result} charge={chargeNorm:F2} timingMul={timingMul:F2} charMul={charStat:F2} → finalMul={pendingShotPower:F2} (launch deferred to contact frame)");
 
             chargeIntent = ChargeIntent.None;
         }
@@ -374,7 +401,7 @@ public class TestPlayerController : MonoBehaviour
             bool inShoot = info.IsName("Shoot");
             if ((inShoot && info.normalizedTime >= shotContactNormalizedTime) || !inShoot)
             {
-                puckCtrl.FireTimedShot(pendingShotPower, pendingShotOvercharged);
+                puckCtrl.FireTimedShot(pendingShotPower, pendingShotChargeNormalized);
                 isAwaitingContact = false;
                 if (logInput)
                     Debug.Log($"[TestPlayer] Puck launched at contact (inShoot={inShoot}, nt={(inShoot ? info.normalizedTime : -1f):F2})");

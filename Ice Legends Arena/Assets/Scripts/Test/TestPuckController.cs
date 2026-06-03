@@ -24,6 +24,11 @@ public class TestPuckController : MonoBehaviour
     [Range(5f, 80f)]
     public float followSpeed = 50f;
 
+    [Tooltip("The puck can only be auto-possessed when it's within this height of the ice — you " +
+             "can't scoop a puck that's still airborne.")]
+    [Range(0.1f, 2f)]
+    public float possessGrabHeight = 0.4f;
+
     [Header("Shooting")]
     [Tooltip("Base shot impulse — multiplied by timing/character/equipment modifiers")]
     [Range(5f, 50f)]
@@ -37,6 +42,45 @@ public class TestPuckController : MonoBehaviour
     [Range(5f, 45f)]
     public float overchargedSprayAngle = 25f;
 
+    [Header("Shot Loft (auto from how long you hold)")]
+    [Tooltip("Vertical launch speed (m/s) of a well-timed shot — peaks around the green zone so a " +
+             "clean snipe lifts toward the top of the net. ~5 peaks near the 1.2m crossbar at the " +
+             "far net.")]
+    [Range(0f, 12f)]
+    public float maxLiftSpeed = 5f;
+
+    [Tooltip("Normalized charge (hold time / charge duration) at which loft STARTS ramping in; " +
+             "below this the shot stays flat. 0.6 = a little lift already kicks in before the 0.75 " +
+             "green zone.")]
+    [Range(0f, 1f)]
+    public float loftStartCharge = 0.6f;
+
+    [Tooltip("Normalized charge at which loft reaches maxLiftSpeed — set near the green window so a " +
+             "perfectly-timed shot gets the full arc.")]
+    [Range(0f, 1.2f)]
+    public float loftPeakCharge = 0.9f;
+
+    [Tooltip("Extra vertical speed (m/s) per 1.0 of overcharge held PAST loftPeakCharge — this is " +
+             "what makes a slightly-late shot sail HIGH over the crossbar. Longer overhold = higher " +
+             "(capped by Max Overcharge Lift).")]
+    [Range(0f, 20f)]
+    public float overchargeLiftPerCharge = 10f;
+
+    [Tooltip("Cap on the extra overcharge loft (m/s) so a wildly late shot doesn't rocket to orbit.")]
+    [Range(0f, 12f)]
+    public float maxOverchargeLift = 5f;
+
+    [Tooltip("Normalized charge past which the shot starts spraying WIDE (and high) — the overcharge " +
+             "penalty. Match to the green-zone end (~0.95).")]
+    [Range(0.5f, 1.2f)]
+    public float overchargeStartCharge = 0.95f;
+
+    [Tooltip("Wide-spray degrees per 1.0 of overcharge past Overcharge Start Charge. Continuous, so " +
+             "a split-second-late shot is only slightly off; way late is wild. Capped by Overcharged " +
+             "Spray Angle.")]
+    [Range(0f, 200f)]
+    public float overchargeSprayPerCharge = 80f;
+
     [Header("Physics")]
     [Tooltip("Puck linear damping (ice friction)")]
     [Range(0f, 2f)]
@@ -45,6 +89,20 @@ public class TestPuckController : MonoBehaviour
     [Tooltip("Puck bounciness off boards")]
     [Range(0f, 1f)]
     public float bounciness = 0.6f;
+
+    [Tooltip("Fraction of vertical speed the puck keeps each time it lands on the ice (0 = dead " +
+             "drop, 1 = perfectly elastic). Scripted so it works even if the arena ice has no " +
+             "collider of its own.")]
+    [Range(0f, 0.9f)]
+    public float groundBounce = 0.4f;
+
+    [Tooltip("Resting height of the puck on the ice surface.")]
+    [Range(0f, 0.3f)]
+    public float restHeight = 0.05f;
+
+    [Tooltip("Below this downward speed (m/s) a landing puck stops bouncing and settles flat.")]
+    [Range(0.2f, 4f)]
+    public float minBounceSpeed = 1.5f;
 
     [Header("Debug")]
     public bool logState = false;
@@ -69,13 +127,17 @@ public class TestPuckController : MonoBehaviour
         // Inspector values win — print them so we know what's actually active.
         Debug.Log($"[TestPuck] Tuning: possR={possessionRadius}, stick={stickOffset}, followSpd={followSpeed}");
 
-        // Puck physics - stays on ice, slides freely
+        // Puck physics. Y is now FREE so the puck can rise on roof shots / saucer passes and
+        // arc back down (real 3D depth). Gravity is toggled per-frame in FixedUpdate — OFF while
+        // possessed (it rides the stick) and ON while loose (it falls). Rotation stays frozen so
+        // the disc doesn't tumble. A scripted ground plane in FixedUpdate handles the landing
+        // bounce, so verticality doesn't depend on the arena ice having a perfect collider.
         rb.useGravity = false;
         rb.linearDamping = puckDamping;
         rb.angularDamping = 0.5f;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        rb.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
 
         // Bouncy material for boards
         if (puckCollider.sharedMaterial == null)
@@ -129,7 +191,8 @@ public class TestPuckController : MonoBehaviour
         float dist = PhysicsHelper.DistanceXZ(transform.position, playerTransform.position);
 
         if (!isPossessed && cooldownTimer <= 0f && dist <= possessionRadius &&
-            PhysicsHelper.SpeedXZ(rb.linearVelocity) < 8f)
+            PhysicsHelper.SpeedXZ(rb.linearVelocity) < 8f &&
+            transform.position.y <= restHeight + possessGrabHeight)
         {
             isPossessed = true;
             rb.linearVelocity = Vector3.zero;
@@ -144,13 +207,8 @@ public class TestPuckController : MonoBehaviour
         // Shooting is now triggered by TestPlayerController via FireTimedShot() so the
         // puck can stay agnostic about input timing and just react to fire commands.
 
-        // Keep puck on ice
-        Vector3 pos = transform.position;
-        if (Mathf.Abs(pos.y) > 0.1f)
-        {
-            pos.y = 0.05f;
-            transform.position = pos;
-        }
+        // (Puck height is now physics-driven — the scripted ice floor lives in FixedUpdate so the
+        // landing bounce stays in sync with the rigidbody step. No per-frame Y clamp here anymore.)
 
         // Debug logging
         if (logState && Time.frameCount % 60 == 0)
@@ -161,6 +219,10 @@ public class TestPuckController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // Gravity rides with possession: OFF while glued to the stick, ON while loose so the puck
+        // falls and arcs. Set every step so every possession entry/exit point stays correct.
+        rb.useGravity = !isPossessed;
+
         // Only follow player if possessed AND not in shot cooldown
         // (cooldown means a shot was just fired - don't override the puck velocity)
         if (isPossessed && cooldownTimer <= 0f && playerTransform != null)
@@ -194,14 +256,32 @@ public class TestPuckController : MonoBehaviour
             rb.MovePosition(newPos);
 
             rb.linearVelocity = Vector3.zero;
+            return;
+        }
+
+        // Loose puck: scripted ice floor so the landing bounce is reliable whether or not the
+        // arena ice has its own collider. When the puck reaches the ice surface moving downward,
+        // reflect + damp its vertical velocity (bounce) until it's slow enough to settle flat.
+        // x/z motion (slide, board ricochet) is untouched — only Y is handled here.
+        if (rb.position.y <= restHeight && rb.linearVelocity.y <= 0f)
+        {
+            Vector3 v = rb.linearVelocity;
+            v.y = (-v.y > minBounceSpeed) ? -v.y * groundBounce : 0f;
+            rb.linearVelocity = v;
+
+            Vector3 p = rb.position; // preserve x/z so the slide stays smooth; only pin Y
+            p.y = restHeight;
+            rb.position = p;
         }
     }
 
     /// <summary>
-    /// Fires the puck with a timing-derived power multiplier. Set <paramref name="overcharged"/>
-    /// true to spray the puck off-axis (matches issue #10's "goes wide" spec for the red zone).
+    /// Fires the puck with a timing-derived power multiplier. <paramref name="chargeNormalized"/>
+    /// (hold time / charge duration, can exceed 1.0 when overheld) drives the continuous loft and
+    /// the overcharge wide-spray: held longer → lifts higher; held past the green window → sails
+    /// high AND wide.
     /// </summary>
-    public void FireTimedShot(float powerMultiplier, bool overcharged)
+    public void FireTimedShot(float powerMultiplier, float chargeNormalized)
     {
         if (!isPossessed) return;
 
@@ -215,21 +295,44 @@ public class TestPuckController : MonoBehaviour
         Vector3 shotDir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
         shotDir = PhysicsHelper.FlattenY(shotDir).normalized;
 
-        if (overcharged)
+        // Overcharge wide-spray: the further past the green window you held, the wider the miss.
+        // Continuous (replaces the old binary overcharged flag) — a split-second late only nudges
+        // it off; way late sprays wild. Side is random; magnitude grows with the overhold.
+        float overcharge = Mathf.Max(0f, chargeNormalized - overchargeStartCharge);
+        if (overcharge > 0f)
         {
-            float spray = Random.Range(-overchargedSprayAngle, overchargedSprayAngle);
+            float spray = Mathf.Min(overcharge * overchargeSprayPerCharge, overchargedSprayAngle);
+            spray *= (Random.value < 0.5f ? -1f : 1f);
             shotDir = Quaternion.Euler(0f, spray, 0f) * shotDir;
         }
 
         rb.linearVelocity = Vector3.zero;
         rb.AddForce(shotDir * shotPower * powerMultiplier, ForceMode.Impulse);
 
+        // Auto-loft from how long you held: ramps in from loftStartCharge, peaks at loftPeakCharge
+        // (a clean green snipe lifts toward the top of the net), then KEEPS climbing past the peak
+        // so a slightly-overcharged shot sails high over the crossbar. VelocityChange => an exact
+        // m/s regardless of puck mass; gravity (on while loose) arcs it back down.
+        float baseLift = maxLiftSpeed * Mathf.InverseLerp(loftStartCharge, loftPeakCharge, chargeNormalized);
+        float overLift = Mathf.Min(Mathf.Max(0f, chargeNormalized - loftPeakCharge) * overchargeLiftPerCharge, maxOverchargeLift);
+        float vy = baseLift + overLift;
+        if (vy > 0f)
+            rb.AddForce(Vector3.up * vy, ForceMode.VelocityChange);
+
+        // Trick Shot (Gunslinger): if the shooter armed a trick shot, stamp the ricochet
+        // behaviour onto the puck now that it's left the stick. No-op when not armed.
+        if (playerTransform != null)
+        {
+            TrickShotModifier trick = playerTransform.GetComponent<TrickShotModifier>();
+            if (trick != null && trick.IsLoaded) trick.ApplyToPuck(gameObject);
+        }
+
         // Animation is already playing — it was triggered on Space PRESS by
         // TestPlayerController so a freeze-at-peak wind-up could be held. Don't
         // re-trigger here or the slap-shot restarts from the beginning instead
         // of completing its release phase.
 
-        Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower * powerMultiplier:F1} (mul={powerMultiplier:F2}{(overcharged ? ", OVERCHARGED" : "")})");
+        Debug.Log($"SHOT! dir={shotDir:F2}, power={shotPower * powerMultiplier:F1} (mul={powerMultiplier:F2}, charge={chargeNormalized:F2}, vy={vy:F1}{(overcharge > 0f ? ", OVERCHARGED" : "")})");
     }
 
     /// <summary>

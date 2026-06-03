@@ -55,6 +55,8 @@ public class TimingMeter : MonoBehaviour
     public float CurrentCharge => currentCharge;
     public float NormalizedCharge => currentCharge / chargeDuration;
     public TimingResult LastResult => lastResult;
+    public float GreenZoneStart => greenZoneStart;
+    public float GreenZoneEnd => greenZoneEnd;
 
     private void Update()
     {
