@@ -1,18 +1,23 @@
 using UnityEngine;
 
 /// <summary>
-/// Gunslinger ability: Trick Shot
-/// Next shot ricochets off boards at sharp angles
-/// The puck becomes unpredictable and can curve around defenders
+/// Gunslinger ability: Trick Shot (loader).
+/// Activating ARMS the player (optional golden aura). The next shot fired becomes a puck that
+/// ricochets off the boards several times at sharp, slightly randomized angles before the
+/// effect wears off. The shot pipeline (TestPuckController.FireTimedShot) stamps the armed
+/// trick shot onto the puck on release, so it rides the player's normal Space shot.
+///
+/// This is a "loader" ability — distinct from instant casts like MeteorStrike. There's no
+/// projectile to spawn or target; the payoff is the player's next shot.
 /// </summary>
 public class TrickShot : Ability
 {
     [Header("Trick Shot Settings")]
-    [Tooltip("Number of ricochets before trick shot wears off")]
+    [Tooltip("Number of board ricochets before the trick shot wears off")]
     [Range(1, 5)]
     [SerializeField] private int maxRicochets = 3;
 
-    [Tooltip("Bounciness multiplier for trick shot (1.0 = normal, 2.0 = very bouncy)")]
+    [Tooltip("Bounciness multiplier for the trick shot puck (1.0 = normal, 2.0 = very bouncy)")]
     [Range(1f, 2f)]
     [SerializeField] private float bouncinessMultiplier = 1.5f;
 
@@ -20,14 +25,16 @@ public class TrickShot : Ability
     [Range(0.7f, 1.1f)]
     [SerializeField] private float ricochetSpeedRetention = 0.95f;
 
-    [Header("Visual Settings")]
-    [Tooltip("Trail color for trick shot puck")]
+    [Header("Visuals")]
+    [Tooltip("Trail color for the trick shot puck")]
     [SerializeField] private Color trailColor = new Color(1f, 0.8f, 0.2f, 1f); // Golden
 
-    // References
-    private PlayerManager playerManager;
+    [Tooltip("Optional VFX spawned on the player while armed (e.g. a mobilized Spells Pack " +
+             "aura/buff). Parented to the player root; destroyed when the armed shot fires or " +
+             "the ability is re-armed.")]
+    [SerializeField] private GameObject armedEffect;
 
-    // State
+    private PlayerManager playerManager;
     private bool isTrickShotReady = false;
 
     public bool IsTrickShotReady => isTrickShotReady;
@@ -46,63 +53,47 @@ public class TrickShot : Ability
             return;
         }
 
-        // Get controlled player
-        GameObject controlledPlayer = GetControlledPlayer();
-        if (controlledPlayer == null)
+        GameObject player = GetControlledPlayer();
+        if (player == null)
         {
             Debug.LogWarning("TrickShot: No controlled player found!");
             return;
         }
 
-        // Add or activate trick shot modifier
-        TrickShotModifier modifier = controlledPlayer.GetComponent<TrickShotModifier>();
-        if (modifier == null)
-        {
-            modifier = controlledPlayer.AddComponent<TrickShotModifier>();
-        }
+        TrickShotModifier modifier = player.GetComponent<TrickShotModifier>();
+        if (modifier == null) modifier = player.AddComponent<TrickShotModifier>();
 
-        modifier.LoadTrickShot(maxRicochets, bouncinessMultiplier, ricochetSpeedRetention, trailColor, this);
+        GameObject armed = SpawnArmedEffect(player);
+        modifier.LoadTrickShot(maxRicochets, bouncinessMultiplier, ricochetSpeedRetention, trailColor, armed, this);
         isTrickShotReady = true;
 
-        Debug.Log($"TRICK SHOT LOADED! Next shot will ricochet {maxRicochets} times!");
-
-        // Visual feedback - could add glow to puck or player
-        ShowTrickShotReadyIndicator(controlledPlayer);
+        Debug.Log($"TRICK SHOT LOADED! Next shot ricochets {maxRicochets}x.");
     }
 
+    /// <summary>
+    /// Currently controlled player. Gameplay scene uses PlayerManager; the 1v1 test scene has
+    /// none, so fall back to the TestPlayerController, then the Player tag.
+    /// </summary>
     private GameObject GetControlledPlayer()
     {
         if (playerManager != null && playerManager.CurrentPlayer != null)
-        {
             return playerManager.CurrentPlayer;
-        }
+        TestPlayerController testPlayer = FindAnyObjectByType<TestPlayerController>();
+        if (testPlayer != null) return testPlayer.gameObject;
         return GameObject.FindGameObjectWithTag("Player");
     }
 
-    /// <summary>
-    /// Show visual indicator that trick shot is ready
-    /// </summary>
-    private void ShowTrickShotReadyIndicator(GameObject player)
+    /// <summary>Spawns the armed aura parented to the player root (no bone scaling needed).</summary>
+    private GameObject SpawnArmedEffect(GameObject player)
     {
-        // Add golden glow/outline to player or their stick
-        SpriteRenderer sr = player.GetComponent<SpriteRenderer>();
-        if (sr == null) sr = player.GetComponentInChildren<SpriteRenderer>();
-
-        if (sr != null)
-        {
-            // Store original color and apply golden tint
-            TrickShotVisual visual = player.GetComponent<TrickShotVisual>();
-            if (visual == null)
-            {
-                visual = player.AddComponent<TrickShotVisual>();
-            }
-            visual.Activate(sr, trailColor);
-        }
+        if (armedEffect == null) return null;
+        GameObject fx = Instantiate(armedEffect, player.transform);
+        fx.transform.localPosition = Vector3.zero;
+        fx.transform.localRotation = Quaternion.identity;
+        return fx;
     }
 
-    /// <summary>
-    /// Called by TrickShotModifier when the shot is fired
-    /// </summary>
+    /// <summary>Called by TrickShotModifier when the armed shot is consumed.</summary>
     public void OnTrickShotFired()
     {
         isTrickShotReady = false;
@@ -111,8 +102,8 @@ public class TrickShot : Ability
 }
 
 /// <summary>
-/// Modifier component that tracks trick shot state on a player
-/// ShootingController checks for this to apply trick shot properties
+/// Marker component the shooter carries while a trick shot is armed. TestPuckController checks
+/// for this on the firing player and calls ApplyToPuck when the shot leaves the stick.
 /// </summary>
 public class TrickShotModifier : MonoBehaviour
 {
@@ -123,70 +114,53 @@ public class TrickShotModifier : MonoBehaviour
     public Color TrailColor { get; private set; }
 
     private TrickShot ownerAbility;
+    private GameObject armedInstance;
 
-    public void LoadTrickShot(int ricochets, float bounciness, float retention, Color color, TrickShot owner)
+    public void LoadTrickShot(int ricochets, float bounciness, float retention, Color color, GameObject armed, TrickShot owner)
     {
+        if (armedInstance != null) Destroy(armedInstance); // re-arm: clear the old aura
+
         IsLoaded = true;
         MaxRicochets = ricochets;
         BouncinessMultiplier = bounciness;
         SpeedRetention = retention;
         TrailColor = color;
+        armedInstance = armed;
         ownerAbility = owner;
 
-        Debug.Log($"TrickShotModifier: Loaded with {ricochets} ricochets, {bounciness}x bounce");
+        Debug.Log($"TrickShotModifier: loaded {ricochets} ricochets, {bounciness}x bounce.");
     }
 
-    /// <summary>
-    /// Called when a shot is fired - applies trick shot to puck and consumes charge
-    /// </summary>
+    /// <summary>Stamps the trick shot onto a just-fired puck and consumes the charge.</summary>
     public void ApplyToPuck(GameObject puck)
     {
         if (!IsLoaded) return;
 
-        // Add TrickShotPuck component
         TrickShotPuck trickPuck = puck.GetComponent<TrickShotPuck>();
-        if (trickPuck == null)
-        {
-            trickPuck = puck.AddComponent<TrickShotPuck>();
-        }
-
+        if (trickPuck == null) trickPuck = puck.AddComponent<TrickShotPuck>();
         trickPuck.Activate(MaxRicochets, BouncinessMultiplier, SpeedRetention, TrailColor);
 
-        // Consume the trick shot
         IsLoaded = false;
-
-        // Notify the ability
-        if (ownerAbility != null)
-        {
-            ownerAbility.OnTrickShotFired();
-        }
-
-        // Remove visual indicator
-        TrickShotVisual visual = GetComponent<TrickShotVisual>();
-        if (visual != null)
-        {
-            visual.Deactivate();
-        }
-
-        Debug.Log("TrickShotModifier: Applied to puck, charge consumed!");
+        if (armedInstance != null) Destroy(armedInstance);
+        if (ownerAbility != null) ownerAbility.OnTrickShotFired();
     }
 }
 
 /// <summary>
-/// Component added to puck when trick shot is active
-/// Handles enhanced ricochet behavior
+/// Lives on the puck while a trick shot is in flight. Counts board ricochets, retains speed
+/// with a slight random angle for unpredictability, and wears off after maxRicochets. The
+/// actual rebound is Unity physics — this just enhances and bounds it.
 /// </summary>
 public class TrickShotPuck : MonoBehaviour
 {
     private int remainingRicochets;
-    private float bouncinessMultiplier;
     private float speedRetention;
+    private float bouncinessMultiplier;
     private Color trailColor;
     private bool isActive;
 
     private Rigidbody rb;
-    private TrailRenderer trailRenderer;
-    private float originalBounciness;
+    private TrailRenderer trail;
     private PhysicsMaterial originalMaterial;
 
     public void Activate(int ricochets, float bounciness, float retention, Color color)
@@ -196,189 +170,89 @@ public class TrickShotPuck : MonoBehaviour
         speedRetention = retention;
         trailColor = color;
         isActive = true;
-
         rb = GetComponent<Rigidbody>();
 
-        // Add trail effect
         AddTrailEffect();
-
-        // Modify physics material for extra bounce
         ModifyBounciness();
-
-        Debug.Log($"TrickShotPuck activated: {ricochets} ricochets remaining");
+        Debug.Log($"TrickShotPuck active: {ricochets} ricochets.");
     }
 
     private void AddTrailEffect()
     {
-        // Add golden trail
-        trailRenderer = gameObject.GetComponent<TrailRenderer>();
-        if (trailRenderer == null)
-        {
-            trailRenderer = gameObject.AddComponent<TrailRenderer>();
-        }
+        trail = GetComponent<TrailRenderer>();
+        if (trail == null) trail = gameObject.AddComponent<TrailRenderer>();
+        trail.time = 0.35f;
+        trail.startWidth = 0.18f; // sized for the 3D puck (the old 0.3 was 2D-scale)
+        trail.endWidth = 0.02f;
+        trail.numCapVertices = 4;
+        trail.material = CreateTrailMaterial();
+        trail.startColor = trailColor;
+        trail.endColor = new Color(trailColor.r, trailColor.g, trailColor.b, 0f);
+    }
 
-        trailRenderer.time = 0.3f;
-        trailRenderer.startWidth = 0.3f;
-        trailRenderer.endWidth = 0.05f;
-        trailRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        trailRenderer.startColor = trailColor;
-        trailRenderer.endColor = new Color(trailColor.r, trailColor.g, trailColor.b, 0f);
-        trailRenderer.sortingOrder = 10;
+    /// <summary>URP-safe unlit material so the trail never renders pink; falls through likely
+    /// shader names since the exact one varies by URP version.</summary>
+    private static Material CreateTrailMaterial()
+    {
+        Shader sh = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
+        if (sh == null) sh = Shader.Find("Sprites/Default");
+        return new Material(sh);
     }
 
     private void ModifyBounciness()
     {
         Collider col = GetComponent<Collider>();
-        if (col != null && col.sharedMaterial != null)
-        {
-            // Store original and create modified material
-            originalMaterial = col.sharedMaterial;
-            originalBounciness = col.sharedMaterial.bounciness;
+        if (col == null || col.sharedMaterial == null) return;
+        originalMaterial = col.sharedMaterial;
 
-            PhysicsMaterial trickMaterial = new PhysicsMaterial("TrickShotMaterial");
-            trickMaterial.bounciness = Mathf.Min(originalBounciness * bouncinessMultiplier, 1f);
-            trickMaterial.dynamicFriction = col.sharedMaterial.dynamicFriction * 0.5f; // Less friction for smoother ricochets
-            trickMaterial.staticFriction = col.sharedMaterial.staticFriction * 0.5f;
-
-            col.sharedMaterial = trickMaterial;
-        }
+        PhysicsMaterial trick = new PhysicsMaterial("TrickShotMaterial");
+        trick.bounciness = Mathf.Clamp01(col.sharedMaterial.bounciness * bouncinessMultiplier);
+        trick.dynamicFriction = col.sharedMaterial.dynamicFriction * 0.5f; // smoother ricochets
+        trick.staticFriction = col.sharedMaterial.staticFriction * 0.5f;
+        trick.bounceCombine = PhysicsMaterialCombine.Maximum;
+        col.sharedMaterial = trick;
     }
 
     private void OnCollisionEnter(Collision collision)
     {
         if (!isActive) return;
 
-        // Check if we hit a board/wall (use name check to avoid tag-not-defined errors)
-        bool hitBoard = collision.gameObject.name.Contains("Board") ||
-                        collision.gameObject.name.Contains("Wall") ||
-                        collision.gameObject.name.Contains("Rink") ||
-                        collision.gameObject.name.Contains("Boundary") ||
-                        collision.gameObject.layer == LayerMask.NameToLayer("Boards");
+        // A board hit = collision with a STATIC collider (no rigidbody → walls, not players)
+        // whose surface normal is roughly horizontal (a wall, not the ice floor whose normal
+        // points up). Name/tag/layer-independent, so it works with the imported arena's walls
+        // whatever they're called and never miscounts a player body-check as a ricochet.
+        if (collision.rigidbody != null) return;            // dynamic (player/opponent) — ignore
+        Vector3 n = collision.GetContact(0).normal;
+        if (Mathf.Abs(n.y) >= 0.5f) return;                 // floor/ceiling, not a board
 
-        // Also check tag if it exists (wrapped to avoid errors)
-        try
+        remainingRicochets--;
+        Debug.Log($"TRICK SHOT RICOCHET! {remainingRicochets} left.");
+
+        if (rb != null)
         {
-            if (collision.gameObject.CompareTag("Board") || collision.gameObject.CompareTag("Wall"))
-            {
-                hitBoard = true;
-            }
+            Vector3 vel = rb.linearVelocity * speedRetention;
+            float jitter = Random.Range(-10f, 10f); // unpredictability on the XZ plane
+            vel = Quaternion.Euler(0f, jitter, 0f) * vel;
+            rb.linearVelocity = vel;
         }
-        catch { /* Tag doesn't exist, ignore */ }
 
-        if (hitBoard)
-        {
-            remainingRicochets--;
-            Debug.Log($"TRICK SHOT RICOCHET! {remainingRicochets} remaining");
-
-            // Apply speed retention
-            if (rb != null)
-            {
-                Vector3 vel = rb.linearVelocity;
-                vel *= speedRetention;
-
-                // Add slight random angle variation on XZ plane for unpredictability
-                float randomAngle = Random.Range(-10f, 10f);
-                vel = Quaternion.Euler(0, randomAngle, 0) * vel;
-                rb.linearVelocity = vel;
-            }
-
-            // Flash effect on ricochet
-            StartCoroutine(RicochetFlash());
-
-            if (remainingRicochets <= 0)
-            {
-                Deactivate();
-            }
-        }
-    }
-
-    private System.Collections.IEnumerator RicochetFlash()
-    {
-        // Brief bright flash on ricochet
-        SpriteRenderer sr = GetComponent<SpriteRenderer>();
-        if (sr != null)
-        {
-            Color originalColor = sr.color;
-            sr.color = Color.yellow;
-            yield return new WaitForSeconds(0.1f);
-            sr.color = originalColor;
-        }
+        if (remainingRicochets <= 0) Deactivate();
     }
 
     private void Deactivate()
     {
         isActive = false;
-        Debug.Log("Trick Shot effect ended");
+        if (trail != null) Destroy(trail);
 
-        // Remove trail
-        if (trailRenderer != null)
-        {
-            Destroy(trailRenderer);
-        }
-
-        // Restore original physics
         Collider col = GetComponent<Collider>();
-        if (col != null && originalMaterial != null)
-        {
-            col.sharedMaterial = originalMaterial;
-        }
+        if (col != null && originalMaterial != null) col.sharedMaterial = originalMaterial;
 
-        // Remove this component
         Destroy(this);
     }
 
     private void OnDestroy()
     {
-        // Clean up trail if still exists
-        if (trailRenderer != null)
-        {
-            Destroy(trailRenderer);
-        }
-    }
-}
-
-/// <summary>
-/// Visual indicator that trick shot is ready
-/// </summary>
-public class TrickShotVisual : MonoBehaviour
-{
-    private SpriteRenderer targetRenderer;
-    private Color originalColor;
-    private Color glowColor;
-    private bool isActive;
-
-    public void Activate(SpriteRenderer sr, Color color)
-    {
-        targetRenderer = sr;
-        originalColor = sr.color;
-        glowColor = color;
-        isActive = true;
-    }
-
-    public void Deactivate()
-    {
-        isActive = false;
-        if (targetRenderer != null)
-        {
-            targetRenderer.color = originalColor;
-        }
-        Destroy(this);
-    }
-
-    private void Update()
-    {
-        if (!isActive || targetRenderer == null) return;
-
-        // Pulsing glow effect
-        float pulse = 0.7f + Mathf.Sin(Time.time * 4f) * 0.3f;
-        targetRenderer.color = Color.Lerp(originalColor, glowColor, pulse * 0.3f);
-    }
-
-    private void OnDestroy()
-    {
-        if (targetRenderer != null)
-        {
-            targetRenderer.color = originalColor;
-        }
+        if (trail != null) Destroy(trail);
     }
 }
