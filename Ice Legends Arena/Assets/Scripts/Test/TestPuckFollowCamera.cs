@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Broadcast-style camera for the test scene. Follows the puck on the XZ
@@ -55,14 +56,19 @@ public class TestPuckFollowCamera : MonoBehaviour
     [Header("Directional Follow")]
     [Tooltip("When ON, the camera swings to sit BEHIND the direction of play and look the way " +
              "you're heading — so skating toward your own goal brings it into view instead of " +
-             "leaving it in a blind spot behind a fixed forward-facing camera. OFF = the old " +
-             "fixed broadcast orientation (always looks toward +Z / the opponent goal).")]
-    public bool directionAware = true;
+             "leaving it in a blind spot behind a fixed forward-facing camera. OFF (default) = a " +
+             "fixed broadcast orientation that always looks toward +Z (the opponent goal) and just " +
+             "slides forward/back with the puck — no rotation, ever.")]
+    public bool directionAware = false;
 
-    [Tooltip("Puck Z-speed (m/s) needed to commit a camera flip. Hysteresis: below this the " +
-             "camera holds its current facing, so dekes and small back-and-forth don't spin it.")]
-    [Range(0.5f, 10f)]
-    public float flipVelocityThreshold = 3f;
+    [Tooltip("Half-width (m) of the dead zone around center ice. The camera only re-orients " +
+             "toward a goal once the puck is more than this far into that half, so carrying the " +
+             "puck across the red line — or a hard shot / board ricochet near center — doesn't " +
+             "flip-flop the facing. The flip is driven by which rink-half the puck is in, NOT by " +
+             "puck velocity, which is what keeps a bouncing trick-shot puck from spinning the cam.")]
+    [FormerlySerializedAs("flipVelocityThreshold")]
+    [Range(0f, 15f)]
+    public float flipDeadZoneZ = 3f;
 
     [Tooltip("How fast the camera swings around when play direction flips (higher = snappier). " +
              "It eases through an overhead angle during the swing, so keep it gentle for comfort.")]
@@ -126,17 +132,22 @@ public class TestPuckFollowCamera : MonoBehaviour
         float anchorX = targetX * followX;
         float anchorZ = targetZ * followZ;
 
-        // Direction-aware facing. Commit a flip only when the puck clearly moves along Z
-        // (hysteresis via flipVelocityThreshold), then ease faceSign toward the new direction.
-        // faceSign: +1 = look toward +Z (opponent goal, the original behavior), -1 = look toward
-        // -Z (own goal). Holding the band keeps it steady through dekes and stops.
-        if (directionAware && puckRb != null)
+        // Direction-aware facing. Decide which goal the play is oriented toward from the puck's
+        // rink-half — NOT its instantaneous velocity. A hard shot or board ricochet reverses puck
+        // velocity for a moment without changing which end the play is actually in, so reading
+        // POSITION keeps a bouncing trick-shot puck (deep behind a goal) from spinning the camera.
+        // A dead zone around center ice (flipDeadZoneZ) gives hysteresis so carrying the puck
+        // across the red line doesn't flip-flop the facing. faceSign: +1 = look toward +Z (opponent
+        // goal, the original behavior), -1 = look toward -Z (own goal); faceTurnSpeed eases the
+        // swing so it never snaps. (Possessed pucks report zero velocity anyway — the old velocity
+        // read only ever saw loose pucks, i.e. exactly the shots/ricochets that shouldn't flip it.)
+        if (directionAware)
         {
-            float vz = puckRb.linearVelocity.z;
-            if (vz > flipVelocityThreshold)
+            if (puckPos.z > flipDeadZoneZ)
                 faceSign = Mathf.MoveTowards(faceSign, 1f, faceTurnSpeed * Time.deltaTime);
-            else if (vz < -flipVelocityThreshold)
+            else if (puckPos.z < -flipDeadZoneZ)
                 faceSign = Mathf.MoveTowards(faceSign, -1f, faceTurnSpeed * Time.deltaTime);
+            // Inside the dead zone: hold the current facing.
         }
         else
         {
