@@ -296,11 +296,22 @@ MonoBehaviour:
   possessionRadius: 1.2
   stickOffset: 1.1
   followSpeed: 20
+  possessGrabHeight: 0.4
   shotPower: 20
   shotCooldown: 1
   overchargedSprayAngle: 25
+  maxLiftSpeed: 5
+  loftStartCharge: 0.6
+  loftPeakCharge: 0.9
+  overchargeLiftPerCharge: 10
+  maxOverchargeLift: 5
+  overchargeStartCharge: 0.95
+  overchargeSprayPerCharge: 80
   puckDamping: 0.5
   bounciness: 0.6
+  groundBounce: 0.4
+  restHeight: 0.05
+  minBounceSpeed: 1.5
   logState: 0
 --- !u!54 &676035251
 Rigidbody:
@@ -620,6 +631,78 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 208cfb53ff4531249a64a750a4561ddf, type: 3}
+--- !u!1 &1076962416
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1076962419}
+  - component: {fileID: 1076962418}
+  - component: {fileID: 1076962417}
+  m_Layer: 0
+  m_Name: TestGoal_Opponent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1076962417
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1076962416}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b94d4cbfb946084d848e486d4104f35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestGoalTrigger
+  isPlayerNet: 0
+  netDeadenFactor: 0.1
+  resetPuckOnGoal: 1
+  goalCelebrationDelay: 2.5
+  faceoffPoint: {x: 0, y: 0.05, z: 0}
+  scoreCooldown: 1
+--- !u!65 &1076962418
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1076962416}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 3, y: 2.2, z: 1.2}
+  m_Center: {x: 0, y: 1.1, z: 0}
+--- !u!4 &1076962419
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1076962416}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 23.432737}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1093791736
 GameObject:
   m_ObjectHideFlags: 0
@@ -770,6 +853,9 @@ MonoBehaviour:
   smoothSpeed: 6
   predictiveFollow: 1
   predictionAmount: 0.3
+  directionAware: 0
+  flipDeadZoneZ: 3
+  faceTurnSpeed: 2.5
   constrainToBounds: 1
   minBounds: {x: -12, y: -22}
   maxBounds: {x: 12, y: 22}
@@ -835,6 +921,8 @@ GameObject:
   - component: {fileID: 1116581419}
   - component: {fileID: 1116581421}
   - component: {fileID: 1116581420}
+  - component: {fileID: 1116581423}
+  - component: {fileID: 1116581422}
   m_Layer: 0
   m_Name: TestPlayer
   m_TagString: Player
@@ -867,6 +955,8 @@ MonoBehaviour:
   chargeMoveSpeedFactor: 0.5
   shotPeakNormalizedTime: 0.128
   shotContactNormalizedTime: 0.35
+  overchargePowerFalloffRange: 0.5
+  overchargeMinPowerMul: 0.6
   heavyCheckContactNormalizedTime: 0.25
   mediumCheckContactNormalizedTime: 0
   lightCheckContactNormalizedTime: 0
@@ -1033,6 +1123,112 @@ MonoBehaviour:
   castContactTimeout: 1
   castHandEffect: {fileID: 6881474406348169789, guid: 1383858474c74aa3b30fc21325104e70, type: 3}
   castEffectScale: 1
+--- !u!114 &1116581422
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c38907f3cd78944aab0bf60e2c57ea6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestAbilityController
+  ability: {fileID: 1116581423}
+  activationKey: 19
+--- !u!114 &1116581423
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9df8456ff1c5e946b5a4b0c7e808343, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrickShot
+  abilityData: {fileID: 0}
+  isOnCooldown: 0
+  cooldownRemaining: 0
+  maxRicochets: 3
+  bouncinessMultiplier: 1.5
+  ricochetSpeedRetention: 0.95
+  trailColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  armedEffect: {fileID: 6476038097601970992, guid: 647d444a98ce475c98862e13e811ca48, type: 3}
+--- !u!1 &1235125567
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1235125570}
+  - component: {fileID: 1235125569}
+  - component: {fileID: 1235125568}
+  m_Layer: 0
+  m_Name: TestGoal_Own
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1235125568
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1235125567}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b94d4cbfb946084d848e486d4104f35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestGoalTrigger
+  isPlayerNet: 1
+  netDeadenFactor: 0.1
+  resetPuckOnGoal: 1
+  goalCelebrationDelay: 2.5
+  faceoffPoint: {x: 0, y: 0.05, z: 0}
+  scoreCooldown: 1
+--- !u!65 &1235125569
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1235125567}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 3, y: 2.2, z: 1.2}
+  m_Center: {x: 0, y: 1.1, z: 0}
+--- !u!4 &1235125570
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1235125567}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -23.432737}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1459536127
 GameObject:
   m_ObjectHideFlags: 0
@@ -1655,3 +1851,5 @@ SceneRoots:
   - {fileID: 1106142173}
   - {fileID: 1773543300}
   - {fileID: 978456745}
+  - {fileID: 1076962419}
+  - {fileID: 1235125570}
