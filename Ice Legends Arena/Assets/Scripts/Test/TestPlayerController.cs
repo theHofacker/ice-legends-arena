@@ -152,8 +152,14 @@ public class TestPlayerController : MonoBehaviour
     // Normalized charge (hold time / charge duration) at release — drives the puck's continuous
     // loft and overcharge wide-spray. Can exceed 1.0 when overheld.
     private float pendingShotChargeNormalized = 0f;
+    // Aimed shot direction, locked at release from the aimer's cone/assist result. Vector3.zero
+    // means "no aimer present" — the puck then falls back to its legacy last-movement-dir shot.
+    private Vector3 pendingShotAimDir = Vector3.zero;
 
     private TestPuckController puckCtrl;
+    // Optional shot aimer (TestShotAimer on this same GameObject). Null = the old straight-down-your-
+    // movement-direction shot still works, so the scene runs fine before the component is added.
+    private TestShotAimer aimer;
 
     public TimingMeter TimingMeter => timingMeter;
 
@@ -213,6 +219,7 @@ public class TestPlayerController : MonoBehaviour
         }
 
         puckCtrl = FindFirstObjectByType<TestPuckController>();
+        aimer = GetComponent<TestShotAimer>();
     }
 
     private void FixedUpdate()
@@ -321,6 +328,13 @@ public class TestPlayerController : MonoBehaviour
             chargeIntent = ChargeIntent.Shot;
             timingMeter.StartCharging();
 
+            // Freeze the aim cone to the facing direction AT PRESS (the player can keep skating/
+            // turning while charging, but the cone stays anchored to where they were pointed when
+            // they committed — that's what makes approach angle matter). Origin = the player so the
+            // cone-to-net geometry is measured from roughly the puck's launch spot.
+            if (aimer != null)
+                aimer.BeginAim(transform.forward, transform.position);
+
             // Fire the Shoot animation NOW (on press) — it'll play into the wind-up
             // and freeze at the peak via UpdateShotWindUpFreeze. Previously the
             // trigger fired on release; that was fine for instant shots, but doesn't
@@ -369,6 +383,11 @@ public class TestPlayerController : MonoBehaviour
             // the normalized charge we pass through.
             pendingShotPower = timingMul * charStat;
             pendingShotChargeNormalized = chargeNorm;
+            // Lock the aim when you commit (release), same instant power is locked. The puck then
+            // flies down this direction at the contact frame. Vector3.zero if no aimer → puck falls
+            // back to its legacy last-movement-direction shot.
+            pendingShotAimDir = aimer != null ? aimer.AimDirection : Vector3.zero;
+            if (aimer != null) aimer.EndAim();
             isAwaitingContact = true;
 
             if (logInput)
@@ -401,7 +420,7 @@ public class TestPlayerController : MonoBehaviour
             bool inShoot = info.IsName("Shoot");
             if ((inShoot && info.normalizedTime >= shotContactNormalizedTime) || !inShoot)
             {
-                puckCtrl.FireTimedShot(pendingShotPower, pendingShotChargeNormalized);
+                puckCtrl.FireTimedShot(pendingShotPower, pendingShotChargeNormalized, pendingShotAimDir);
                 isAwaitingContact = false;
                 if (logInput)
                     Debug.Log($"[TestPlayer] Puck launched at contact (inShoot={inShoot}, nt={(inShoot ? info.normalizedTime : -1f):F2})");

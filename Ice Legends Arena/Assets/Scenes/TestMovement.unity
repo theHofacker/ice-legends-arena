@@ -923,6 +923,7 @@ GameObject:
   - component: {fileID: 1116581420}
   - component: {fileID: 1116581423}
   - component: {fileID: 1116581422}
+  - component: {fileID: 1116581424}
   m_Layer: 0
   m_Name: TestPlayer
   m_TagString: Player
@@ -1157,6 +1158,27 @@ MonoBehaviour:
   ricochetSpeedRetention: 0.95
   trailColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   armedEffect: {fileID: 6476038097601970992, guid: 647d444a98ce475c98862e13e811ca48, type: 3}
+--- !u!114 &1116581424
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19aabe4f4e0b04b42b9fb83fce151957, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestShotAimer
+  aimConeHalfAngle: 45
+  assistStrength: 0.5
+  assistMargin: 12
+  aimCamera: {fileID: 0}
+  targetNet: {fileID: 0}
+  showIndicator: 1
+  indicatorLength: 12
+  indicatorHeight: 0.06
+  logAim: 0
 --- !u!1 &1235125567
 GameObject:
   m_ObjectHideFlags: 0

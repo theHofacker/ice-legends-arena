@@ -279,9 +279,11 @@ public class TestPuckController : MonoBehaviour
     /// Fires the puck with a timing-derived power multiplier. <paramref name="chargeNormalized"/>
     /// (hold time / charge duration, can exceed 1.0 when overheld) drives the continuous loft and
     /// the overcharge wide-spray: held longer → lifts higher; held past the green window → sails
-    /// high AND wide.
+    /// high AND wide. <paramref name="aimDir"/> is the AIMED shot direction (from TestShotAimer's
+    /// cone/assist); pass Vector3.zero to fall back to the legacy "straight down last movement
+    /// direction" behavior so the scene still works before the aimer is added.
     /// </summary>
-    public void FireTimedShot(float powerMultiplier, float chargeNormalized)
+    public void FireTimedShot(float powerMultiplier, float chargeNormalized, Vector3 aimDir = default)
     {
         if (!isPossessed) return;
 
@@ -292,7 +294,12 @@ public class TestPuckController : MonoBehaviour
         if (playerCol != null)
             Physics.IgnoreCollision(puckCollider, playerCol, false);
 
-        Vector3 shotDir = lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward;
+        // Aimed direction wins; fall back to last movement direction when no aim was supplied.
+        Vector3 shotDir;
+        if (PhysicsHelper.FlattenY(aimDir).sqrMagnitude > 0.01f)
+            shotDir = PhysicsHelper.FlattenY(aimDir).normalized;
+        else
+            shotDir = (lastPlayerDir.magnitude > 0.1f ? lastPlayerDir : Vector3.forward);
         shotDir = PhysicsHelper.FlattenY(shotDir).normalized;
 
         // Overcharge wide-spray: the further past the green window you held, the wider the miss.
