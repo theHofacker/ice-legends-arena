@@ -21,10 +21,16 @@ public class TestGoalTrigger : MonoBehaviour
              "opponent's net → the player scored. Drives the score label only.")]
     public bool isPlayerNet = false;
 
+    [Tooltip("With the REAL net (TestNetSetup), leave this OFF: the goal line should only COUNT, " +
+             "and the puck should keep its speed so it blasts into the net — the soft netting " +
+             "(TestNetDeaden) + solid backstop catch and settle it. Turn ON only for the old " +
+             "standalone fat-box goal, where the line itself has to deaden the puck.")]
+    public bool deadenPuckOnEntry = true;
+
     [Tooltip("How much of the puck's speed survives when it crosses into the goal — the net " +
              "'catching' it. 0.1 = keep 10% so it deadens and drops into the net instead of " +
              "rebounding hard off the net collider. Vertical speed is zeroed regardless so it " +
-             "settles fast. 1 = no deaden (old hard bounce).")]
+             "settles fast. 1 = no deaden (old hard bounce). Only used when deadenPuckOnEntry is ON.")]
     [Range(0f, 1f)]
     public float netDeadenFactor = 0.1f;
 
@@ -88,7 +94,7 @@ public class TestGoalTrigger : MonoBehaviour
         Debug.Log($"GOAL! {(isPlayerNet ? "OPPONENT" : "PLAYER")} scores.  PLAYER {PlayerGoals} – {OpponentGoals} OPPONENT");
 
         Rigidbody puckRb = other.attachedRigidbody;
-        DeadenPuck(puckRb);
+        if (deadenPuckOnEntry) DeadenPuck(puckRb);
         if (resetPuckOnGoal) StartCoroutine(ResetPuckAfterDelay(puckRb));
     }
 
