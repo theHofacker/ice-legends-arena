@@ -134,6 +134,84 @@ public static class TestNetSetup
     }
 
     /// <summary>
+    /// STAGE 1 of promoting TestMovement to the real gameplay scene: wire the net's scoring through
+    /// <see cref="GameManager"/> instead of the self-contained <c>TestGoalTrigger</c>. Adds a
+    /// GameManager (+ a minimal <see cref="TestMatchHUD"/>) if the scene has none, then swaps each
+    /// net's GoalLine from TestGoalTrigger to the real <see cref="GoalTrigger"/> — carrying the
+    /// isPlayerNet flag over to isPlayerGoal (identical meaning: the puck entering the player's own
+    /// net counts for the opponent). The real GoalTrigger counts only while the match is Playing and
+    /// calls GameManager.GoalScored, which handles score / events / the face-off reset loop (so the
+    /// old per-trigger celebration+reset is no longer needed). Safe to re-run.
+    /// Netting (TestNetDeaden) is left as-is — it's puck-tag-gated and scene-agnostic; swapping it to
+    /// NetPhysics is cosmetic cleanup for a later stage, not part of scoring.
+    /// </summary>
+    [MenuItem("Ice Legends/Wire Net Scoring to GameManager")]
+    public static void WireNetScoringToGameManager()
+    {
+        // --- 1. Ensure a GameManager (+ HUD) exists. ---
+        GameManager gm = Object.FindFirstObjectByType<GameManager>();
+        if (gm == null)
+        {
+            GameObject go = new GameObject("GameManager");
+            Undo.RegisterCreatedObjectUndo(go, "Add GameManager");
+            gm = Undo.AddComponent<GameManager>(go);
+            Undo.AddComponent<TestMatchHUD>(go);
+            Debug.Log("Wire Net Scoring: created a GameManager (+ TestMatchHUD) — defaults are fine " +
+                      "(5:00 match, center-ice face-off). It auto-starts the match on Play.");
+        }
+        else if (gm.GetComponent<TestMatchHUD>() == null)
+        {
+            Undo.AddComponent<TestMatchHUD>(gm.gameObject);
+        }
+
+        // --- 2. Swap each net's GoalLine: TestGoalTrigger -> real GoalTrigger. ---
+        int swapped = 0, already = 0;
+        foreach (string netName in new[] { "TestNet_Opponent", "TestNet_Own" })
+        {
+            GameObject net = GameObject.Find(netName);
+            if (net == null) continue;
+            Transform line = net.transform.Find("GoalLine");
+            if (line == null)
+            {
+                Debug.LogWarning($"Wire Net Scoring: '{netName}' has no GoalLine — skipped.");
+                continue;
+            }
+
+            TestGoalTrigger test = line.GetComponent<TestGoalTrigger>();
+            if (test == null)
+            {
+                if (line.GetComponent<GoalTrigger>() != null) already++;
+                else Debug.LogWarning($"Wire Net Scoring: '{netName}/GoalLine' has neither trigger — skipped.");
+                continue;
+            }
+
+            bool isPlayerNet = test.isPlayerNet; // player's own net => opponent scores here
+            Undo.DestroyObjectImmediate(test);
+
+            GoalTrigger real = line.GetComponent<GoalTrigger>();
+            if (real == null) real = Undo.AddComponent<GoalTrigger>(line.gameObject);
+            var so = new SerializedObject(real);
+            so.FindProperty("isPlayerGoal").boolValue = isPlayerNet;
+            so.ApplyModifiedProperties();
+            swapped++;
+        }
+
+        // --- 3. Sanity-check the puck tag GameManager relies on. ---
+        GameObject puck = null;
+        try { puck = GameObject.FindWithTag("Puck"); } catch { /* tag undefined */ }
+        if (puck == null)
+            Debug.LogWarning("Wire Net Scoring: no active object tagged 'Puck' found — GameManager " +
+                             "won't find the puck at runtime. Tag the puck 'Puck' before testing.");
+
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+            UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+
+        Debug.Log($"Wire Net Scoring: swapped {swapped} goal line(s) to the real GoalTrigger" +
+                  $"{(already > 0 ? $" ({already} already swapped)" : "")}. Scoring now flows through " +
+                  "GameManager. Press Play — after the face-off the score updates on a goal. Save the scene to keep it.");
+    }
+
+    /// <summary>
     /// Copy the manually-tuned geometry of TestNet_Opponent onto TestNet_Own as a true mirror across
     /// center ice (Z=0). The two net roots sit at +Z / -Z and each opens toward center, so within each
     /// root's local space the mirror is a Z-flip: local X / Y / scale / collider size are identical,

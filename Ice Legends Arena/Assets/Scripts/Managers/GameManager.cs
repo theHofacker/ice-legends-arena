@@ -52,6 +52,14 @@ public class GameManager : MonoBehaviour
     [Range(0.5f, 3f)]
     [SerializeField] private float puckDropDelay = 1f;
 
+    [Header("Sandbox / Testing")]
+    [Tooltip("Sandbox mode for freeform mechanic testing: skip the auto face-off (no puck " +
+             "teleport-to-center / random nudge) and the match timer. Goals still count and fire " +
+             "events, but play stays LIVE and the puck stays where it lands. Turn OFF for real " +
+             "match flow (timed match, face-off reset after each goal).")]
+    [SerializeField] private bool sandboxMode = false;
+    public bool SandboxMode => sandboxMode;
+
     // Match state
     public enum MatchState
     {
@@ -120,6 +128,18 @@ public class GameManager : MonoBehaviour
         // Initialize timer
         timeRemaining = matchDuration;
 
+        if (sandboxMode)
+        {
+            // Freeform testing: go live immediately so goals count, but no face-off / timer.
+            playerScore = 0;
+            opponentScore = 0;
+            OnScoreChanged?.Invoke(playerScore, opponentScore);
+            ChangeState(MatchState.Playing);
+            Debug.Log("GameManager: SANDBOX MODE — no auto face-off / timer. Goals count & the puck " +
+                      "stays where it lands. Uncheck Sandbox Mode for real match flow.");
+            return;
+        }
+
         // Start match with face-off
         StartMatch();
     }
@@ -153,8 +173,8 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        // Update timer when playing
-        if (currentState == MatchState.Playing)
+        // Update timer when playing (sandbox mode runs no clock)
+        if (currentState == MatchState.Playing && !sandboxMode)
         {
             UpdateMatchTimer();
         }
@@ -258,6 +278,9 @@ public class GameManager : MonoBehaviour
         // Notify listeners
         OnScoreChanged?.Invoke(playerScore, opponentScore);
         OnGoalScored?.Invoke(scoredByPlayer, playerScore, opponentScore);
+
+        // Sandbox: keep play live (no celebration state, no face-off reset) so testing flows freely.
+        if (sandboxMode) return;
 
         // Change state to goal celebration
         ChangeState(MatchState.GoalScored);
