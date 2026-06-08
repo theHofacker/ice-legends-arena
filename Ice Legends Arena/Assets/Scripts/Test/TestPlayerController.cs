@@ -98,6 +98,55 @@ public class TestPlayerController : MonoBehaviour
     [Range(0.1f, 1.5f)]
     public float checkContactTimeout = 0.6f;
 
+    [Header("Passing")]
+    [Tooltip("Press B to pass to the best teammate (nearest one that's forward-ish) within this XZ range.")]
+    [Range(5f, 40f)]
+    public float passRange = 30f;
+
+    [Tooltip("HOLD B this long (s) to reach full pass power; a quick tap is a soft short pass. Power " +
+             "between min/max lives on the puck (Min/Max Pass Power).")]
+    [Range(0.1f, 2f)]
+    public float passChargeDuration = 0.55f;
+
+    [Header("One-Timer")]
+    [Tooltip("Tap Space as an incoming pass arrives (while NOT carrying) to redirect it in one motion. " +
+             "Max XZ distance the incoming puck can be to attempt a one-timer.")]
+    [Range(1f, 6f)]
+    public float oneTimerWindowRadius = 3.5f;
+
+    [Tooltip("Min dot(puck velocity dir, dir to me) for the puck to count as a pass coming AT me.")]
+    [Range(0f, 1f)]
+    public float oneTimerAlignment = 0.25f;
+
+    [Tooltip("Ignore pucks faster than this for one-timers (so you don't one-time a hard shot flying by).")]
+    [Range(6f, 30f)]
+    public float oneTimerMaxSpeed = 22f;
+
+    [Tooltip("Time-to-arrival (s) that counts as PERFECT timing (max power + accuracy). Tap when the " +
+             "puck is roughly this far out. Earlier = swinging at air, later = it's already past you.")]
+    [Range(0.03f, 0.4f)]
+    public float oneTimerPerfectWindow = 0.12f;
+
+    [Tooltip("How far (s) the tap can be off the perfect window before the bonus drops to the minimum.")]
+    [Range(0.05f, 0.6f)]
+    public float oneTimerFalloff = 0.3f;
+
+    [Tooltip("Power multiplier for a badly-timed one-timer.")]
+    [Range(0.5f, 1.5f)]
+    public float oneTimerMinBonus = 0.9f;
+
+    [Tooltip("Power multiplier for a perfectly-timed one-timer (bigger than a clean green shot — the reward).")]
+    [Range(1f, 2f)]
+    public float oneTimerMaxBonus = 1.45f;
+
+    [Tooltip("Loft charge fed to the one-timer (0.85 ≈ a clean snipe lifting toward the top of the net).")]
+    [Range(0f, 1.2f)]
+    public float oneTimerLoftCharge = 0.85f;
+
+    [Tooltip("Max wide-spray (deg) on a badly-timed one-timer; tightens to 0 at perfect timing.")]
+    [Range(0f, 40f)]
+    public float oneTimerMaxSpray = 25f;
+
     [Header("Debug")]
     public bool logInput = false;
 
@@ -121,12 +170,15 @@ public class TestPlayerController : MonoBehaviour
     private TimingMeter timingMeter;
 
     /// <summary>
-    /// Tracks what the player is currently charging so Space (shot) and F (check)
-    /// don't interfere. If Space is held first, F press is ignored until Space
-    /// is released, and vice versa.
+    /// Tracks what the player is currently charging so Space (shot), F (check) and B
+    /// (pass) don't interfere. Whichever key is pressed first wins; the others are
+    /// ignored until it's released.
     /// </summary>
-    private enum ChargeIntent { None, Shot, Check }
+    private enum ChargeIntent { None, Shot, Check, Pass }
     private ChargeIntent chargeIntent = ChargeIntent.None;
+    // Pass charge tracker: -1 = not charging; >=0 = B held this many seconds. Crosses
+    // passChargeDuration for full power; released early = a softer/shorter pass.
+    private float passChargeTime = -1f;
 
     // Animator hashes
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
@@ -157,6 +209,7 @@ public class TestPlayerController : MonoBehaviour
     private Vector3 pendingShotAimDir = Vector3.zero;
 
     private TestPuckController puckCtrl;
+    private Rigidbody puckRb; // for reading incoming-pass speed/direction (one-timer detection)
     // Optional shot aimer (TestShotAimer on this same GameObject). Null = the old straight-down-your-
     // movement-direction shot still works, so the scene runs fine before the component is added.
     private TestShotAimer aimer;
@@ -219,6 +272,7 @@ public class TestPlayerController : MonoBehaviour
         }
 
         puckCtrl = FindFirstObjectByType<TestPuckController>();
+        if (puckCtrl != null) puckRb = puckCtrl.GetComponent<Rigidbody>();
         aimer = GetComponent<TestShotAimer>();
     }
 
@@ -311,6 +365,146 @@ public class TestPlayerController : MonoBehaviour
 
         HandleShotInput();
         HandleCheckInput();
+        HandlePassInput();
+    }
+
+    /// <summary>
+    /// B = pass to the best teammate, HELD to power it up. Press to begin charging (only while we
+    /// actually hold the puck and nothing else is charging, so it can't fire during a shot/check
+    /// wind-up); the longer B is held the harder the pass (tap = soft short pass, full hold = hard
+    /// cross-ice pass). On release, picks the most forward teammate in range via
+    /// <see cref="FindPassTarget"/>, LEADS their skating path so the puck doesn't land behind a moving
+    /// receiver, and hands off to TestPuckController.PassTo at the charged power.
+    /// </summary>
+    private void HandlePassInput()
+    {
+        if (puckCtrl == null || Keyboard.current == null) return;
+
+        bool bDown = Keyboard.current.bKey.wasPressedThisFrame;
+        bool bUp = Keyboard.current.bKey.wasReleasedThisFrame;
+
+        // Begin charging.
+        if (bDown && puckCtrl.IsPossessed && chargeIntent == ChargeIntent.None && !isAwaitingContact)
+        {
+            chargeIntent = ChargeIntent.Pass;
+            passChargeTime = 0f;
+        }
+
+        // Accumulate hold time while charging.
+        if (chargeIntent == ChargeIntent.Pass && passChargeTime >= 0f)
+            passChargeTime += Time.deltaTime;
+
+        // Release → fire the charged, led pass.
+        if (bUp && chargeIntent == ChargeIntent.Pass)
+        {
+            float charge = Mathf.Clamp01(passChargeTime / Mathf.Max(0.01f, passChargeDuration));
+            passChargeTime = -1f;
+            chargeIntent = ChargeIntent.None;
+
+            if (!puckCtrl.IsPossessed) return; // lost the puck mid-charge (got checked, etc.)
+
+            TestTeammateController target = FindPassTarget();
+            if (target == null)
+            {
+                if (logInput) Debug.Log("[TestPlayer] Pass: no teammate in range");
+                return;
+            }
+
+            // Lead the receiver by how hard this pass is thrown, so a skating teammate meets the puck
+            // instead of it arriving behind them.
+            float passSpeed = puckCtrl.GetPassSpeed(charge);
+            Vector3 leadPoint = PhysicsHelper.LeadPointXZ(
+                transform.position, target.transform.position, target.PlanarVelocity, passSpeed);
+
+            if (puckCtrl.PassTo(leadPoint, charge))
+            {
+                Debug.Log($"[TestPlayer] PASS to {target.name} (charge={charge:F2})");
+                // Hand control to the receiver so you become the skater catching the pass (and can
+                // one-time it). No-op if there's no TestTeamController in the scene.
+                if (TestTeamController.Instance != null)
+                    TestTeamController.Instance.OnPassedTo(target.gameObject);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Best pass target = the teammate within passRange that's most "forward" (toward where the player
+    /// is facing), tie-broken toward closer. Falls back to the nearest teammate if none read as
+    /// forward. Returns null if there are no teammates in range.
+    /// </summary>
+    private TestTeammateController FindPassTarget()
+    {
+        TestTeammateController[] mates = FindObjectsByType<TestTeammateController>(FindObjectsSortMode.None);
+        TestTeammateController best = null, nearest = null;
+        float bestScore = float.NegativeInfinity, nearestDist = float.PositiveInfinity;
+
+        foreach (TestTeammateController mate in mates)
+        {
+            if (mate == null) continue;
+            // Skip our OWN (disabled) teammate controller — with the dual-controller switching setup,
+            // the skater we're controlling also carries a TestTeammateController, and we can't pass to self.
+            if (mate.gameObject == gameObject) continue;
+            float dist = PhysicsHelper.DistanceXZ(transform.position, mate.transform.position);
+            if (dist > passRange) continue;
+
+            if (dist < nearestDist) { nearestDist = dist; nearest = mate; }
+
+            Vector3 dir = PhysicsHelper.DirectionXZ(transform.position, mate.transform.position);
+            float score = Vector3.Dot(dir, transform.forward) - dist * 0.03f; // forward preferred, closer preferred
+            if (score > bestScore) { bestScore = score; best = mate; }
+        }
+
+        return best != null ? best : nearest;
+    }
+
+    /// <summary>
+    /// True when a loose puck is flying AT this skater (within the one-timer window, aligned toward me,
+    /// not too fast). <paramref name="timeToArrival"/> ≈ XZ distance / XZ speed — how long until it
+    /// reaches me, which drives the one-timer timing bonus.
+    /// </summary>
+    private bool TryGetIncomingPass(out float timeToArrival)
+    {
+        timeToArrival = 0f;
+        if (puckCtrl == null || puckRb == null || puckCtrl.IsPossessed) return false;
+
+        Vector3 puckPos = puckCtrl.transform.position;
+        float dist = PhysicsHelper.DistanceXZ(transform.position, puckPos);
+        if (dist > oneTimerWindowRadius) return false;
+
+        float speed = PhysicsHelper.SpeedXZ(puckRb.linearVelocity);
+        if (speed < 1f || speed > oneTimerMaxSpeed) return false;
+
+        Vector3 puckDir = PhysicsHelper.FlattenY(puckRb.linearVelocity).normalized;
+        Vector3 toMe = PhysicsHelper.DirectionXZ(puckPos, transform.position);
+        if (Vector3.Dot(puckDir, toMe) < oneTimerAlignment) return false;
+
+        timeToArrival = dist / Mathf.Max(0.01f, speed);
+        return true;
+    }
+
+    /// <summary>
+    /// Redirect the incoming pass in one motion. Power + accuracy scale with how close to the puck's
+    /// actual arrival the tap was: perfect timing = max power, no spray; mistimed = weaker and wide.
+    /// Aimed along the player's facing (orient the skater toward the net for a one-timer snipe).
+    /// </summary>
+    private void FireOneTimer(float timeToArrival)
+    {
+        float err = Mathf.Abs(timeToArrival - oneTimerPerfectWindow);
+        float perfect = 1f - Mathf.Clamp01(err / Mathf.Max(0.01f, oneTimerFalloff));
+
+        float bonus = Mathf.Lerp(oneTimerMinBonus, oneTimerMaxBonus, perfect);
+        float charStat = (characterData != null) ? characterData.shotPower : 1f;
+        float spray = (1f - perfect) * oneTimerMaxSpray * (Random.value < 0.5f ? -1f : 1f);
+
+        Vector3 aimDir = (aimer != null && PhysicsHelper.FlattenY(aimer.AimDirection).sqrMagnitude > 0.01f)
+            ? aimer.AimDirection
+            : transform.forward;
+
+        puckCtrl.RedirectShot(aimDir, bonus * charStat, oneTimerLoftCharge, spray);
+
+        if (animator != null) animator.SetTrigger(ShootHash);
+        if (logInput)
+            Debug.Log($"[TestPlayer] ONE-TIMER tta={timeToArrival:F2}s perfect={perfect:F2} bonus={bonus:F2} spray={spray:F0}");
     }
 
     private void HandleShotInput()
@@ -319,6 +513,17 @@ public class TestPlayerController : MonoBehaviour
 
         bool spaceDown = Keyboard.current.spaceKey.wasPressedThisFrame;
         bool spaceUp = Keyboard.current.spaceKey.wasReleasedThisFrame;
+
+        // ONE-TIMER: if we DON'T hold the puck but a pass is flying at us, a Space tap redirects it in
+        // one motion (no trap). Consume the press so the normal charge branch below doesn't also react.
+        // If you mistime it late and the puck already auto-trapped, IsPossessed is true and this skips,
+        // so the tap just begins a normal shot charge instead.
+        if (spaceDown && !puckCtrl.IsPossessed && chargeIntent == ChargeIntent.None && !isAwaitingContact
+            && TryGetIncomingPass(out float oneTimerTta))
+        {
+            FireOneTimer(oneTimerTta);
+            spaceDown = false;
+        }
 
         // Begin charging only while we actually hold the puck and the meter isn't
         // already in use for a check. Without the intent guard, mashing both keys

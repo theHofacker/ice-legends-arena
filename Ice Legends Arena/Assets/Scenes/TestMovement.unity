@@ -643,6 +643,11 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.1, y: 1.2473633, z: 0.3003768}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!4 &98772867 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+  m_PrefabInstance: {fileID: 1677060463}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &117652359
 GameObject:
   m_ObjectHideFlags: 0
@@ -1140,6 +1145,302 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -104}
   m_SizeDelta: {x: 400, y: 56}
   m_Pivot: {x: 0.5, y: 1}
+--- !u!1 &387239713
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 387239720}
+  - component: {fileID: 387239719}
+  - component: {fileID: 387239718}
+  - component: {fileID: 387239717}
+  - component: {fileID: 387239716}
+  - component: {fileID: 387239715}
+  - component: {fileID: 387239714}
+  - component: {fileID: 387239723}
+  - component: {fileID: 387239722}
+  - component: {fileID: 387239721}
+  m_Layer: 0
+  m_Name: TestTeammate
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &387239714
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87ae3a58b6fd63943a80309a6abbddeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestTeammateController
+  moveSpeed: 6.5
+  rotationSpeed: 8
+  possessionRadius: 1.5
+  stickOffset: 0.7
+  puckFollowSpeed: 40
+  receiveRadius: 3
+  receiveAlignment: 0.3
+  maxReceiveSpeed: 16
+  supportLead: 6
+  supportSide: 4
+  shotPower: 15
+  shootDistance: 12
+  returnPassRange: 22
+  returnPassDelay: 0.35
+  returnPassForwardDot: 0.15
+  returnPassPower: 15
+  attackGoal: {fileID: 0}
+  zBoundary: 25.5
+  teamColor: {r: 0.25, g: 0.55, b: 1, a: 1}
+  debugFreezePosition: 0
+--- !u!114 &387239715
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cb7029ccb69cdb40ad0fd6371ed8953, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StickAttacher
+  stickPrefab: {fileID: 7162165873249720486, guid: b73c63e5a1f989f4793581ab5a99085f, type: 3}
+  mode: 0
+  stickScale: 0.75
+  topHandBone: 17
+  bottomHandBone: 18
+  flipShaft: 0
+  rollDegrees: -20.3
+  buttOffset: {x: 0, y: 0, z: 0.0001}
+  handGripFactor: 0.7
+  bottomHandShaftFraction: 0.35
+  bottomHandOffset: {x: 2.59, y: 0.55, z: 5.16}
+  gripBone: 18
+  fallbackBonePath: 
+  gripPositionOffset: {x: 0.05, y: -0.1, z: 0.1}
+  gripRotationOffset: {x: -30, y: 45, z: 30}
+  clampBladeToIce: 1
+  iceY: 0
+  bladeClearance: 0.01
+  maxClampAngle: 40
+  manualAdjust: 0
+  drawGizmo: 1
+  drawContactGizmo: 1
+--- !u!114 &387239716
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4a0277ecdca9a749b98f54bd3aef78d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OpponentDebugLogger
+  writeCsv: 1
+  outputFolderName: DebugCaptures
+  logInterval: 0.05
+  flushEvery: 30
+  showHud: 1
+  hudFontSize: 14
+  hudScreenPos: {x: 10, y: 10}
+  logStateChanges: 1
+--- !u!114 &387239717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9303285f1ea5702428773cb54c78e2c2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestOpponentController
+  moveSpeed: 6.5
+  rotationSpeed: 8
+  possessionRadius: 0.8
+  stickOffset: 0.9
+  puckFollowSpeed: 10
+  shotPower: 15
+  shootDistance: 12
+  attackGoal: {fileID: 0}
+  checkRange: 1
+  checkForce: 5
+  puckKnockLooseSpeed: 5
+  postCheckRepossessDelay: 0.7
+  zBoundary: 25.5
+  checkCooldown: 2
+  stunDuration: 2.755
+  lightKnockback: 8
+  lightStun: 0.5
+  mediumKnockback: 14
+  mediumStun: 1.2
+  heavyKnockback: 20
+  boardCheckDistance: 1
+  boardCheckStunBonus: 0.5
+  boardCheckKnockback: 7
+  teamColor: {r: 1, g: 0, b: 0, a: 1}
+  debugFreezePosition: 1
+--- !u!54 &387239718
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
+--- !u!136 &387239719
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.3
+  m_Height: 1
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.5, z: 0}
+--- !u!4 &387239720
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 5, y: 0, z: -8}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 98772867}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &387239721
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19aabe4f4e0b04b42b9fb83fce151957, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestShotAimer
+  aimConeHalfAngle: 45
+  assistStrength: 0.5
+  assistMargin: 12
+  aimCamera: {fileID: 0}
+  targetNet: {fileID: 0}
+  showIndicator: 1
+  indicatorLength: 12
+  indicatorHeight: 0.06
+  logAim: 0
+--- !u!114 &387239722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9506609ceeb5d4f44952e78e086e0371, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestPlayerController
+  moveSpeed: 6.5
+  acceleration: 10
+  deceleration: 0.8
+  rotationSpeed: 10
+  checkRange: 2.5
+  checkCooldown: 1.00075
+  lightChargeThreshold: 0.4
+  checkTapGracePeriod: 0.12
+  animator: {fileID: 0}
+  characterData: {fileID: 0}
+  chargeMoveSpeedFactor: 0.5
+  shotPeakNormalizedTime: 0.128
+  shotContactNormalizedTime: 0.35
+  overchargePowerFalloffRange: 0.5
+  overchargeMinPowerMul: 0.6
+  heavyCheckContactNormalizedTime: 0.25
+  mediumCheckContactNormalizedTime: 0
+  lightCheckContactNormalizedTime: 0
+  checkContactTimeout: 0.6
+  passRange: 30
+  passChargeDuration: 0.55
+  oneTimerWindowRadius: 3.5
+  oneTimerAlignment: 0.25
+  oneTimerMaxSpeed: 22
+  oneTimerPerfectWindow: 0.12
+  oneTimerFalloff: 0.3
+  oneTimerMinBonus: 0.9
+  oneTimerMaxBonus: 1.45
+  oneTimerLoftCharge: 0.85
+  oneTimerMaxSpray: 25
+  logInput: 0
+--- !u!114 &387239723
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 387239713}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35fe9ddd2835a9941be89427022fb367, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TimingMeter
+  chargeDuration: 1
+  greenZoneStart: 0.75
+  greenZoneEnd: 0.95
+  yellowZoneMultiplier: 0.8
+  greenZoneMultiplier: 2
+  redZoneMultiplier: 0.6
 --- !u!1 &401922758
 GameObject:
   m_ObjectHideFlags: 0
@@ -1838,6 +2139,12 @@ MonoBehaviour:
   shotPower: 20
   shotCooldown: 1
   overchargedSprayAngle: 25
+  minPassPower: 9
+  maxPassPower: 26
+  passRepossessCooldown: 0.5
+  receiveRadius: 3
+  receiveAlignment: 0.3
+  maxReceiveSpeed: 18
   maxLiftSpeed: 5
   loftStartCharge: 0.6
   loftPeakCharge: 0.9
@@ -2744,6 +3051,7 @@ GameObject:
   - component: {fileID: 1116581423}
   - component: {fileID: 1116581422}
   - component: {fileID: 1116581424}
+  - component: {fileID: 1116581425}
   m_Layer: 0
   m_Name: TestPlayer
   m_TagString: Player
@@ -2782,6 +3090,17 @@ MonoBehaviour:
   mediumCheckContactNormalizedTime: 0
   lightCheckContactNormalizedTime: 0
   checkContactTimeout: 0.6
+  passRange: 30
+  passChargeDuration: 0.55
+  oneTimerWindowRadius: 3.5
+  oneTimerAlignment: 0.25
+  oneTimerMaxSpeed: 22
+  oneTimerPerfectWindow: 0.12
+  oneTimerFalloff: 0.3
+  oneTimerMinBonus: 0.9
+  oneTimerMaxBonus: 1.45
+  oneTimerLoftCharge: 0.85
+  oneTimerMaxSpray: 25
   logInput: 0
 --- !u!54 &1116581415
 Rigidbody:
@@ -2999,6 +3318,38 @@ MonoBehaviour:
   indicatorLength: 12
   indicatorHeight: 0.06
   logAim: 0
+--- !u!114 &1116581425
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1116581413}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87ae3a58b6fd63943a80309a6abbddeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestTeammateController
+  moveSpeed: 6.5
+  rotationSpeed: 8
+  possessionRadius: 1.5
+  stickOffset: 0.7
+  puckFollowSpeed: 40
+  receiveRadius: 3
+  receiveAlignment: 0.3
+  maxReceiveSpeed: 16
+  supportLead: 6
+  supportSide: 4
+  shotPower: 15
+  shootDistance: 12
+  returnPassRange: 22
+  returnPassDelay: 0.35
+  returnPassForwardDot: 0.15
+  returnPassPower: 15
+  attackGoal: {fileID: 0}
+  zBoundary: 25.5
+  teamColor: {r: 0.25, g: 0.55, b: 1, a: 1}
+  debugFreezePosition: 0
 --- !u!1 &1126816814
 GameObject:
   m_ObjectHideFlags: 0
@@ -3987,6 +4338,71 @@ Transform:
   - {fileID: 1771778358}
   m_Father: {fileID: 1706037233}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &1677060463
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 387239720}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_Name
+      value: Y Bot
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_Controller
+      value: 
+      objectReference: {fileID: 9100000, guid: c74f7b6a30fe00840b6cf8a97863dacc, type: 2}
+    - target: {fileID: 5866666021909216657, guid: c9232e267490f1441a4873937444eb6b, type: 3}
+      propertyPath: m_WarningMessage
+      value: 
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: c9232e267490f1441a4873937444eb6b, type: 3}
 --- !u!1 &1680467810
 GameObject:
   m_ObjectHideFlags: 0
@@ -5489,6 +5905,53 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.1, y: 1.2473633, z: 0.2545336}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &2042674937
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2042674939}
+  - component: {fileID: 2042674938}
+  m_Layer: 0
+  m_Name: TestTeamController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2042674938
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2042674937}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dae777c46fb6d4d49a55c886520040b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TestTeamController
+  switchKey: 3
+  activeIndicator: {fileID: 0}
+  indicatorHeight: 0.03
+--- !u!4 &2042674939
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2042674937}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2081328075
 GameObject:
   m_ObjectHideFlags: 0
@@ -5608,8 +6071,10 @@ SceneRoots:
   - {fileID: 676035255}
   - {fileID: 1106142173}
   - {fileID: 1773543300}
+  - {fileID: 387239720}
   - {fileID: 978456745}
   - {fileID: 1799009308}
   - {fileID: 1706037233}
   - {fileID: 117652362}
   - {fileID: 33782058}
+  - {fileID: 2042674939}

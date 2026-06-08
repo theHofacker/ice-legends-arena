@@ -284,6 +284,11 @@ public class TestOpponentController : MonoBehaviour
     {
         if (puckTransform == null) return;
 
+        // Chase/target whoever the human currently controls (re-pointed live so switching control
+        // re-aims the opponent). Falls back to the Start-found player when there's no team manager.
+        if (TestTeamController.Instance != null && TestTeamController.Instance.ActiveSkater != null)
+            playerTransform = TestTeamController.Instance.ActiveSkater;
+
         // Tick timers + stun BEFORE the debug-freeze early return. Otherwise pinning
         // the opponent for boardcheck tests leaves isStunned true forever — every
         // re-check then restarts HeavyHit from frame 0 and the body looks like it's

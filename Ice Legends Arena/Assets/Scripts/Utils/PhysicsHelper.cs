@@ -102,4 +102,26 @@ public static class PhysicsHelper
     {
         return Mathf.Abs(SignedAngleXZ(from, to));
     }
+
+    /// <summary>
+    /// Intercept point on the XZ plane: where to aim a projectile of speed
+    /// <paramref name="projectileSpeed"/> fired from <paramref name="shooter"/> so it meets a target
+    /// currently at <paramref name="targetPos"/> moving at <paramref name="targetVel"/>. Two cheap
+    /// refinement passes — good enough for passing, where the receiver actively catches and damping
+    /// makes this a slight under-lead anyway. Falls back to the target's current spot if speed is ~0.
+    /// Y is ignored for the math; the returned point keeps <paramref name="targetPos"/>.y.
+    /// </summary>
+    public static Vector3 LeadPointXZ(Vector3 shooter, Vector3 targetPos, Vector3 targetVel, float projectileSpeed)
+    {
+        if (projectileSpeed < 0.01f) return targetPos;
+        Vector3 vel = FlattenY(targetVel);
+        Vector3 lead = targetPos;
+        for (int i = 0; i < 2; i++)
+        {
+            float t = DistanceXZ(shooter, lead) / projectileSpeed;
+            lead = targetPos + vel * t;
+        }
+        lead.y = targetPos.y;
+        return lead;
+    }
 }
