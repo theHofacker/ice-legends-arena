@@ -24,3 +24,16 @@ Ice Legends Arena/Packages/packages-lock.json
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Blender autosaves
+*.blend1
+
+# Character source art (Blender / Tripo).
+# Track only the hero masters and the Tripo gear inputs (which cost credits to
+# regenerate). Ignore experimental dead-ends and huge one-off generations.
+Characters/*
+!Characters/Blaze_rigged.blend
+!Characters/Blaze_final.blend
+!Characters/Blaze_T-Pose.fbx
+!Characters/blaze_mesh_2.fbx.glb
+!Characters/*3d model*.glb

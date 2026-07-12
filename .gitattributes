@@ -74,3 +74,10 @@
 *.gz binary
 *.tar binary
 *.unitypackage binary
+
+# --- Large binary art assets -> git-lfs ---
+# Blender masters, Tripo generations, and model exports. Without this, every
+# revision of a 28MB .blend would be stored whole in git history forever.
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.glb   filter=lfs diff=lfs merge=lfs -text
+*.fbx   filter=lfs diff=lfs merge=lfs -text
