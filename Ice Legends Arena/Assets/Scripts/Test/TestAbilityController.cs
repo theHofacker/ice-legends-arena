@@ -13,11 +13,18 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class TestAbilityController : MonoBehaviour
 {
+    /// <summary>Which on-screen ability button (if any) also triggers this ability. None = key-only.</summary>
+    public enum TouchSlot { None, Ability1, Ability2 }
+
     [Tooltip("Ability to trigger. Defaults to an Ability on this same GameObject if left empty.")]
     public Ability ability;
 
     [Tooltip("Key that activates the ability. Space (shot) and F (check) are taken by TestPlayerController.")]
     public Key activationKey = Key.Q;
+
+    [Tooltip("On-screen ability button that also fires this ability (for touch). None = keyboard only. " +
+             "Convention: Ability1 = first ability (e.g. MeteorStrike/Q), Ability2 = second (e.g. TrickShot/E).")]
+    public TouchSlot touchSlot = TouchSlot.None;
 
     private void Awake()
     {
@@ -33,9 +40,16 @@ public class TestAbilityController : MonoBehaviour
 
     private void Update()
     {
-        if (Keyboard.current == null || ability == null) return;
+        if (ability == null) return;
 
-        if (Keyboard.current[activationKey].wasPressedThisFrame)
+        bool keyPressed = Keyboard.current != null && Keyboard.current[activationKey].wasPressedThisFrame;
+
+        InputManager.VirtualButton touchBtn = (touchSlot != TouchSlot.None && InputManager.Instance != null)
+            ? InputManager.Instance.GetAbility(touchSlot)
+            : null;
+        bool touchPressed = touchBtn != null && touchBtn.Down;
+
+        if (keyPressed || touchPressed)
         {
             ability.TryActivateAbility();
         }

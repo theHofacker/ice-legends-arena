@@ -83,7 +83,9 @@ public class TestTeamController : MonoBehaviour
 
     private void Update()
     {
-        if (Keyboard.current != null && Keyboard.current[switchKey].wasPressedThisFrame)
+        bool keyPressed = Keyboard.current != null && Keyboard.current[switchKey].wasPressedThisFrame;
+        bool touchPressed = InputManager.Instance != null && InputManager.Instance.Switch.Down;
+        if (keyPressed || touchPressed)
             SwitchToNearestTeammate();
 
         if (activeIndicator != null && ActiveSkater != null)

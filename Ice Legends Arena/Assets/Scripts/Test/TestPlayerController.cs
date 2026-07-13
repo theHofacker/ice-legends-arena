@@ -361,12 +361,28 @@ public class TestPlayerController : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        if (Keyboard.current == null) return;
-
+        // No Keyboard.current gate here: on a touch device there's no keyboard, and the action handlers
+        // below now resolve input from EITHER the keyboard (null-guarded) OR the on-screen buttons.
         HandleShotInput();
         HandleCheckInput();
         HandlePassInput();
     }
+
+    // --- Action input: keyboard OR on-screen TouchActionButton (via InputManager virtual buttons). ---
+    // Each is frame-accurate (Down = pressed this frame, Up = released this frame). The keyboard side is
+    // null-guarded so the no-keyboard (device) path falls through to the touch button cleanly.
+    private bool ShootDown() => (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+                                || (inputManager != null && inputManager.Shoot.Down);
+    private bool ShootUp() => (Keyboard.current != null && Keyboard.current.spaceKey.wasReleasedThisFrame)
+                                || (inputManager != null && inputManager.Shoot.Up);
+    private bool PassDown() => (Keyboard.current != null && Keyboard.current.bKey.wasPressedThisFrame)
+                                || (inputManager != null && inputManager.Pass.Down);
+    private bool PassUp() => (Keyboard.current != null && Keyboard.current.bKey.wasReleasedThisFrame)
+                                || (inputManager != null && inputManager.Pass.Up);
+    private bool CheckDown() => (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+                                || (inputManager != null && inputManager.Check.Down);
+    private bool CheckUp() => (Keyboard.current != null && Keyboard.current.fKey.wasReleasedThisFrame)
+                                || (inputManager != null && inputManager.Check.Up);
 
     /// <summary>
     /// B = pass to the best teammate, HELD to power it up. Press to begin charging (only while we
@@ -378,10 +394,10 @@ public class TestPlayerController : MonoBehaviour
     /// </summary>
     private void HandlePassInput()
     {
-        if (puckCtrl == null || Keyboard.current == null) return;
+        if (puckCtrl == null) return;
 
-        bool bDown = Keyboard.current.bKey.wasPressedThisFrame;
-        bool bUp = Keyboard.current.bKey.wasReleasedThisFrame;
+        bool bDown = PassDown();
+        bool bUp = PassUp();
 
         // Begin charging.
         if (bDown && puckCtrl.IsPossessed && chargeIntent == ChargeIntent.None && !isAwaitingContact)
@@ -509,10 +525,10 @@ public class TestPlayerController : MonoBehaviour
 
     private void HandleShotInput()
     {
-        if (timingMeter == null || puckCtrl == null || Keyboard.current == null) return;
+        if (timingMeter == null || puckCtrl == null) return;
 
-        bool spaceDown = Keyboard.current.spaceKey.wasPressedThisFrame;
-        bool spaceUp = Keyboard.current.spaceKey.wasReleasedThisFrame;
+        bool spaceDown = ShootDown();
+        bool spaceUp = ShootUp();
 
         // ONE-TIMER: if we DON'T hold the puck but a pass is flying at us, a Space tap redirects it in
         // one motion (no trap). Consume the press so the normal charge branch below doesn't also react.
@@ -635,10 +651,10 @@ public class TestPlayerController : MonoBehaviour
 
     private void HandleCheckInput()
     {
-        if (timingMeter == null || Keyboard.current == null) return;
+        if (timingMeter == null) return;
 
-        bool fDown = Keyboard.current.fKey.wasPressedThisFrame;
-        bool fUp = Keyboard.current.fKey.wasReleasedThisFrame;
+        bool fDown = CheckDown();
+        bool fUp = CheckUp();
 
         // F-down only puts us into a "pending" grace window. The wind-up state and
         // timing meter don't start until the grace expires — releasing inside grace
